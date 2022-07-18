@@ -73,10 +73,11 @@ type AquaGatewayInformation struct {
 }
 
 type AquaLogin struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Host     string `json:"host"`
-	Insecure bool   `json:"tlsNoVerify,omitempty"`
+	Username     string `json:"username,omitempty"`
+	Password     string `json:"password,omitempty"`
+	ScannerToken string `json:"token"`
+	Host         string `json:"host"`
+	Insecure     bool   `json:"tlsNoVerify,omitempty"`
 }
 
 type AquaScannerCliScale struct {

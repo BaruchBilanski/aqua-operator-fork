@@ -2970,6 +2970,8 @@ spec:
                 type: object
               login:
                 properties:
+                  token:
+                    type: string
                   host:
                     type: string
                   password:

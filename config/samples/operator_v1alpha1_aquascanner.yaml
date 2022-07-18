@@ -19,5 +19,6 @@ spec:
   login:                                    # Required: Information about login to aqua server for scanning
     username:
     password:
+    token:
     host:
   runAsNonRoot:                             # Optional: true/false

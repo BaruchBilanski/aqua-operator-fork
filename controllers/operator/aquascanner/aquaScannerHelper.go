@@ -85,6 +85,7 @@ func (as *AquaScannerHelper) CreateTokenSecret(cr *v1alpha1.AquaScanner) *corev1
 		Data: map[string][]byte{
 			"AQUA_SCANNER_USERNAME": []byte(cr.Spec.Login.Username),
 			"AQUA_SCANNER_PASSWORD": []byte(cr.Spec.Login.Password),
+			"AQUA_SCANNER_TOKEN":    []byte(cr.Spec.Login.ScannerToken),
 		},
 	}
 
@@ -260,5 +261,8 @@ func (as *AquaScannerHelper) newDeployment(cr *v1alpha1.AquaScanner) *appsv1.Dep
 		deployment.Spec.Template.Spec.Containers[0].Args = append(deployment.Spec.Template.Spec.Containers[0].Args, "--no-verify")
 	}
 
+	if cr.Spec.Login.ScannerToken != "" {
+		deployment.Spec.Template.Spec.Containers[0].Args = append(deployment.Spec.Template.Spec.Containers[0].Args, "--token ${AQUA_SCANNER_TOKEN}")
+	}
 	return deployment
 }
