@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"github.com/aquasecurity/aqua-operator/apis/aquasecurity/v1alpha1"
 	operatorv1alpha1 "github.com/aquasecurity/aqua-operator/apis/operator/v1alpha1"
+	"github.com/aquasecurity/aqua-operator/pkg/consts"
 	"github.com/aquasecurity/aqua-operator/pkg/utils/extra"
 	rbac2 "github.com/aquasecurity/aqua-operator/pkg/utils/k8s/rbac"
-	"os"
-
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"os"
 )
 
 const (
@@ -494,6 +494,7 @@ func (enf *AquaKubeEnforcerHelper) CreateKEConfigMap(cr, namespace, name, app, g
 		"AQUA_TLS_PORT":                "8443",
 		"CLUSTER_NAME":                 clusterName,
 		"AQUA_KB_SCAN_TAINTED_NODES":   "true",
+		"AQUA_KB_IMAGE_NAME":           consts.KubeBenchImage,
 	}
 	if starboard {
 		configMapData["AQUA_KAP_ADD_ALL_CONTROL"] = "true"
