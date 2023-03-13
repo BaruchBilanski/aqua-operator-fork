@@ -1,0 +1,40 @@
+apiVersion: operator.aquasec.com/v1alpha1
+kind: AquaLightning
+metadata:
+  name: aqualightning-sample
+spec:
+  infra:
+    version: '2022.4'
+    serviceAccount: aqua-kube-enforcer-sa
+  config:
+    gateway_address: aqua-gateway:8443
+    cluster_name: Default-cluster-name
+    imagePullSecret: aqua-registry
+  token: "<<KUBE_ENFORCER_GROUP_TOKEN>>"
+  allowAnyVersion:                        # Optional: running all types of images
+  deploy:
+    service: ClusterIP
+    image:
+      registry: registry.aquasec.com
+      tag: "2022.4"
+      repository: kube-enforcer
+      pullPolicy: Always
+    resources:                              # Optional: Set resources requests/limits for kube-enforcer
+      limits:
+        cpu: "SOME VALUE"
+        memory: "SOME VALUE"
+      requests:
+        cpu: "SOME VALUE"
+        memory: "SOME VALUE"
+  starboard:
+    infra:
+      serviceAccount: starboard-operator
+    config:
+      imagePullSecret: starboard-registry
+    deploy:
+      replicas: 1
+  env:                                      # Optional: environment variables to add to the kube-enforcer
+  - name: "SOME ENV"
+    value: "SOME ENV VALUE"
+
+
