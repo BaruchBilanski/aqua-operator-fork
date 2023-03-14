@@ -174,8 +174,9 @@ func main() {
 	if err = (&aqualightning.AquaLightningReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		Certs:  aqualightning.GetKECerts(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AquaLightning")
+		setupLog.Error(err, "unable to create controller", "controller", "AquaKubeEnforcer")
 		os.Exit(1)
 	}
 

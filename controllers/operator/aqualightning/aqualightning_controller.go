@@ -268,7 +268,7 @@ func (r *AquaLightningReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&admissionv1.ValidatingWebhookConfiguration{}).
 		Owns(&admissionv1.MutatingWebhookConfiguration{}).
 		Owns(&corev1.ConfigMap{}).
-		For(&operatorv1alpha1.AquaKubeEnforcer{}).
+		For(&operatorv1alpha1.AquaLightning{}).
 		Complete(r)
 }
 
@@ -600,7 +600,7 @@ func (r *AquaLightningReconciler) addKEClusterRoleBinding(cr *operatorv1alpha1.A
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) CreateClusterReaderRoleBinding(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) CreateClusterReaderRoleBinding(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create KubeEnforcer ClusterReaderRoleBinding")
 	reqLogger.Info("Start creating KubeEnforcer ClusterReaderRoleBinding")
 
