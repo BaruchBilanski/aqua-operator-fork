@@ -22,26 +22,26 @@ const (
 )
 
 // EnforcerParameters :
-type KubeEnforcerParameters struct {
-	KubeEnforcer *operatorv1alpha1.AquaKubeEnforcer
+type LightningParameters struct {
+	KubeEnforcer *operatorv1alpha1.AquaLightning
 }
 
 // AquaEnforcerHelper :
-type AquaKubeEnforcerHelper struct {
-	Parameters KubeEnforcerParameters
+type AquaLightningHelper struct {
+	Parameters LightningParameters
 }
 
-func newAquaKubeEnforcerHelper(cr *operatorv1alpha1.AquaKubeEnforcer) *AquaKubeEnforcerHelper {
-	params := KubeEnforcerParameters{
+func newAquaLightningHelper(cr *operatorv1alpha1.AquaLightning) *AquaLightningHelper {
+	params := LightningParameters{
 		KubeEnforcer: cr,
 	}
 
-	return &AquaKubeEnforcerHelper{
+	return &AquaLightningHelper{
 		Parameters: params,
 	}
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateKubeEnforcerClusterRole(name string, namespace string) *rbacv1.ClusterRole {
+func (enf *AquaLightningHelper) CreateKubeEnforcerClusterRole(name string, namespace string) *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{
@@ -145,7 +145,7 @@ func (enf *AquaKubeEnforcerHelper) CreateKubeEnforcerClusterRole(name string, na
 }
 
 // CreateServiceAccount Create new service account
-func (enf *AquaKubeEnforcerHelper) CreateKEServiceAccount(cr, namespace, app, name string) *corev1.ServiceAccount {
+func (enf *AquaLightningHelper) CreateKEServiceAccount(cr, namespace, app, name string) *corev1.ServiceAccount {
 	labels := map[string]string{
 		"app":                app,
 		"deployedby":         "aqua-operator",
@@ -170,7 +170,7 @@ func (enf *AquaKubeEnforcerHelper) CreateKEServiceAccount(cr, namespace, app, na
 	return sa
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateClusterRoleBinding(cr, namespace, name, app, sa, clusterrole string) *rbacv1.ClusterRoleBinding {
+func (enf *AquaLightningHelper) CreateClusterRoleBinding(cr, namespace, name, app, sa, clusterrole string) *rbacv1.ClusterRoleBinding {
 	labels := map[string]string{
 		"app":                app,
 		"deployedby":         "aqua-operator",
@@ -207,7 +207,7 @@ func (enf *AquaKubeEnforcerHelper) CreateClusterRoleBinding(cr, namespace, name,
 	return crb
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateKubeEnforcerRole(cr, namespace, name, app string) *rbacv1.Role {
+func (enf *AquaLightningHelper) CreateKubeEnforcerRole(cr, namespace, name, app string) *rbacv1.Role {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{
@@ -302,7 +302,7 @@ func (enf *AquaKubeEnforcerHelper) CreateKubeEnforcerRole(cr, namespace, name, a
 	return role
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateRoleBinding(cr, namespace, name, app, sa, role string) *rbacv1.RoleBinding {
+func (enf *AquaLightningHelper) CreateRoleBinding(cr, namespace, name, app, sa, role string) *rbacv1.RoleBinding {
 	labels := map[string]string{
 		"app":                app,
 		"deployedby":         "aqua-operator",
@@ -339,7 +339,7 @@ func (enf *AquaKubeEnforcerHelper) CreateRoleBinding(cr, namespace, name, app, s
 	return rb
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateValidatingWebhook(cr, namespace, name, app, keService string, caBundle []byte) *admissionv1.ValidatingWebhookConfiguration {
+func (enf *AquaLightningHelper) CreateValidatingWebhook(cr, namespace, name, app, keService string, caBundle []byte) *admissionv1.ValidatingWebhookConfiguration {
 	labels := map[string]string{
 		"app":                app,
 		"deployedby":         "aqua-operator",
@@ -418,7 +418,7 @@ func (enf *AquaKubeEnforcerHelper) CreateValidatingWebhook(cr, namespace, name, 
 	return validWebhook
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateMutatingWebhook(cr, namespace, name, app, keService string, caBundle []byte) *admissionv1.MutatingWebhookConfiguration {
+func (enf *AquaLightningHelper) CreateMutatingWebhook(cr, namespace, name, app, keService string, caBundle []byte) *admissionv1.MutatingWebhookConfiguration {
 	labels := map[string]string{
 		"app":                app,
 		"deployedby":         "aqua-operator",
@@ -485,7 +485,7 @@ func (enf *AquaKubeEnforcerHelper) CreateMutatingWebhook(cr, namespace, name, ap
 	return mutateWebhook
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateKEConfigMap(cr, namespace, name, app, gwAddress, clusterName string, starboard bool) *corev1.ConfigMap {
+func (enf *AquaLightningHelper) CreateKEConfigMap(cr, namespace, name, app, gwAddress, clusterName string, starboard bool) *corev1.ConfigMap {
 	configMapData := map[string]string{
 		"AQUA_ENABLE_CACHE":            "yes",
 		"AQUA_CACHE_EXPIRATION_PERIOD": "60",
@@ -527,7 +527,7 @@ func (enf *AquaKubeEnforcerHelper) CreateKEConfigMap(cr, namespace, name, app, g
 	return configMap
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateKETokenSecret(cr, namespace, name, app, token string) *corev1.Secret {
+func (enf *AquaLightningHelper) CreateKETokenSecret(cr, namespace, name, app, token string) *corev1.Secret {
 	labels := map[string]string{
 		"app":                app,
 		"deployedby":         "aqua-operator",
@@ -555,7 +555,7 @@ func (enf *AquaKubeEnforcerHelper) CreateKETokenSecret(cr, namespace, name, app,
 	return tokenSecret
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateKESSLSecret(cr, namespace, name, app string, secretKey, secretCert []byte) *corev1.Secret {
+func (enf *AquaLightningHelper) CreateKESSLSecret(cr, namespace, name, app string, secretKey, secretCert []byte) *corev1.Secret {
 	labels := map[string]string{
 		"app":                app,
 		"deployedby":         "aqua-operator",
@@ -584,7 +584,7 @@ func (enf *AquaKubeEnforcerHelper) CreateKESSLSecret(cr, namespace, name, app st
 	return sslSecret
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateKEService(cr, namespace, name, app string) *corev1.Service {
+func (enf *AquaLightningHelper) CreateKEService(cr, namespace, name, app string) *corev1.Service {
 	labels := map[string]string{
 		"app":                app,
 		"deployedby":         "aqua-operator",
@@ -624,7 +624,7 @@ func (enf *AquaKubeEnforcerHelper) CreateKEService(cr, namespace, name, app stri
 	return service
 }
 
-func (enf *AquaKubeEnforcerHelper) CreateKEDeployment(cr *operatorv1alpha1.AquaKubeEnforcer, name, app, registry, tag, pullPolicy, repository string) *appsv1.Deployment {
+func (enf *AquaLightningHelper) CreateKEDeployment(cr *operatorv1alpha1.AquaLightning, name, app, registry, tag, pullPolicy, repository string) *appsv1.Deployment {
 
 	image := os.Getenv("RELATED_IMAGE_KUBE_ENFORCER")
 	if image == "" {
@@ -832,7 +832,7 @@ func (enf *AquaKubeEnforcerHelper) CreateKEDeployment(cr *operatorv1alpha1.AquaK
 	return deployment
 }
 
-func (ebf *AquaKubeEnforcerHelper) getEnvVars(cr *operatorv1alpha1.AquaKubeEnforcer) []corev1.EnvVar {
+func (ebf *AquaLightningHelper) getEnvVars(cr *operatorv1alpha1.AquaLightning) []corev1.EnvVar {
 	result := []corev1.EnvVar{
 		{
 			Name: "AQUA_TOKEN",
@@ -882,7 +882,7 @@ func (ebf *AquaKubeEnforcerHelper) getEnvVars(cr *operatorv1alpha1.AquaKubeEnfor
 
 // Starboard functions
 
-func (ebf *AquaKubeEnforcerHelper) newStarboard(cr *operatorv1alpha1.AquaKubeEnforcer) *v1alpha1.AquaStarboard {
+func (ebf *AquaLightningHelper) newStarboard(cr *operatorv1alpha1.AquaLightning) *v1alpha1.AquaStarboard {
 
 	_, registry, repository, tag := extra.GetImageData("kube-enforcer", cr.Spec.Infrastructure.Version, cr.Spec.KubeEnforcerService.ImageData, cr.Spec.AllowAnyVersion)
 

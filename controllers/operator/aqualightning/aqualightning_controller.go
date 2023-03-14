@@ -56,7 +56,7 @@ import (
 	operatorv1alpha1 "github.com/aquasecurity/aqua-operator/apis/operator/v1alpha1"
 )
 
-var log = logf.Log.WithName("controller_aquakubeenforcer")
+var log = logf.Log.WithName("controller_aqualightning")
 
 // AquaLightningReconciler reconciles a AquaKubeEnforcer object
 type AquaLightningReconciler struct {
@@ -105,7 +105,7 @@ func (r *AquaLightningReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return reconcile.Result{}, nil
 	}
 	// Fetch the AquaKubeEnforcer instance
-	instance := &operatorv1alpha1.AquaKubeEnforcer{}
+	instance := &operatorv1alpha1.AquaLightning{}
 	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -255,7 +255,7 @@ func (r *AquaLightningReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *AquaLightningReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("aquakubeenforcer-controller").
+		Named("aqualightning-controller").
 		WithOptions(controller.Options{Reconciler: r}).
 		Owns(&corev1.Secret{}).
 		Owns(&corev1.ServiceAccount{}).
@@ -419,7 +419,7 @@ func (r *AquaLightningReconciler) updateKubeEnforcerServerObject(serviceObject *
 	return serviceObject
 }
 
-func (r *AquaLightningReconciler) updateKubeEnforcerObject(cr *operatorv1alpha1.AquaKubeEnforcer) *operatorv1alpha1.AquaKubeEnforcer {
+func (r *AquaLightningReconciler) updateKubeEnforcerObject(cr *operatorv1alpha1.AquaLightning) *operatorv1alpha1.AquaLightning {
 	if secrets.CheckIfSecretExists(r.Client, consts.MtlsAquaKubeEnforcerSecretName, cr.Namespace) {
 		log.Info(fmt.Sprintf("%s secret found, enabling mtls", consts.MtlsAquaKubeEnforcerSecretName))
 		cr.Spec.Mtls = true
@@ -427,13 +427,13 @@ func (r *AquaLightningReconciler) updateKubeEnforcerObject(cr *operatorv1alpha1.
 	return cr
 }
 
-func (r *AquaLightningReconciler) addKEDeployment(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKEDeployment(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Deployment Phase", "Create Deployment")
 	reqLogger.Info("Start creating deployment")
 
 	pullPolicy, registry, repository, tag := extra.GetImageData("kube-enforcer", cr.Spec.Infrastructure.Version, cr.Spec.KubeEnforcerService.ImageData, cr.Spec.AllowAnyVersion)
 
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	deployment := enforcerHelper.CreateKEDeployment(cr,
 		consts.AquaKubeEnforcerClusterRoleBidingName,
 		"ke-deployment",
@@ -510,11 +510,11 @@ func (r *AquaLightningReconciler) addKEDeployment(cr *operatorv1alpha1.AquaKubeE
 	return reconcile.Result{}, nil
 }
 
-func (r *AquaLightningReconciler) addKubeEnforcerClusterRole(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKubeEnforcerClusterRole(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Aqua KubeEnforcer Cluster Role")
 	reqLogger.Info("Start creating kube-enforcer cluster role")
 
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	crole := enforcerHelper.CreateKubeEnforcerClusterRole(cr.Name, cr.Namespace)
 
 	// Set AquaKubeEnforcer instance as the owner and controller
@@ -562,12 +562,12 @@ func (r *AquaLightningReconciler) addKubeEnforcerClusterRole(cr *operatorv1alpha
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) addKEClusterRoleBinding(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKEClusterRoleBinding(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create ClusterRoleBinding")
 	reqLogger.Info("Start creating ClusterRole")
 
 	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	crb := enforcerHelper.CreateClusterRoleBinding(cr.Name,
 		cr.Namespace,
 		consts.AquaKubeEnforcerClusterRoleBidingName,
@@ -638,12 +638,12 @@ func (r *AquaLightningReconciler) CreateClusterReaderRoleBinding(cr *operatorv1a
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) createAquaServiceAccount(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) createAquaServiceAccount(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Aqua KubeEnforcer Service Account")
 	reqLogger.Info("Start creating aqua kube-enforcer service account")
 
 	// Define a new service account object
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	sa := enforcerHelper.CreateKEServiceAccount(cr.Name,
 		cr.Namespace,
 		fmt.Sprintf("%s-requirments", cr.Name),
@@ -674,11 +674,11 @@ func (r *AquaLightningReconciler) createAquaServiceAccount(cr *operatorv1alpha1.
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) addKubeEnforcerRole(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKubeEnforcerRole(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Aqua KubeEnforcer Role")
 	reqLogger.Info("Start creating kube-enforcer role")
 
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	role := enforcerHelper.CreateKubeEnforcerRole(cr.Name, cr.Namespace, consts.AquaKubeEnforcerClusterRoleBidingName, fmt.Sprintf("%s-requirments", cr.Name))
 
 	// Set AquaKubeEnforcer instance as the owner and controller
@@ -725,12 +725,12 @@ func (r *AquaLightningReconciler) addKubeEnforcerRole(cr *operatorv1alpha1.AquaK
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) addKERoleBinding(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKERoleBinding(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create RoleBinding")
 	reqLogger.Info("Start creating RoleBinding")
 
 	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	rb := enforcerHelper.CreateRoleBinding(cr.Name,
 		cr.Namespace,
 		consts.AquaKubeEnforcerClusterRoleBidingName,
@@ -763,12 +763,12 @@ func (r *AquaLightningReconciler) addKERoleBinding(cr *operatorv1alpha1.AquaKube
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) addKEValidatingWebhook(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKEValidatingWebhook(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create ValidatingWebhookConfiguration")
 	reqLogger.Info("Start creating ValidatingWebhookConfiguration")
 
 	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	validWebhook := enforcerHelper.CreateValidatingWebhook(cr.Name,
 		cr.Namespace,
 		consts.AquaKubeEnforcerValidatingWebhookConfigurationName,
@@ -801,12 +801,12 @@ func (r *AquaLightningReconciler) addKEValidatingWebhook(cr *operatorv1alpha1.Aq
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) addKEMutatingWebhook(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKEMutatingWebhook(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create MutatingWebhookConfiguration")
 	reqLogger.Info("Start creating MutatingWebhookConfiguration")
 
 	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	mutateWebhook := enforcerHelper.CreateMutatingWebhook(cr.Name,
 		cr.Namespace,
 		consts.AquaKubeEnforcerMutantingWebhookConfigurationName,
@@ -839,13 +839,13 @@ func (r *AquaLightningReconciler) addKEMutatingWebhook(cr *operatorv1alpha1.Aqua
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) addKEConfigMap(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKEConfigMap(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create ConfigMap")
 	reqLogger.Info("Start creating ConfigMap")
 	//reqLogger.Info(fmt.Sprintf("cr object : %v", cr.ObjectMeta))
 
 	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	deployStarboard := false
 	if cr.Spec.DeployStarboard != nil {
 		deployStarboard = true
@@ -902,11 +902,11 @@ func (r *AquaLightningReconciler) addKEConfigMap(cr *operatorv1alpha1.AquaKubeEn
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) addKESecretToken(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKESecretToken(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Token Secret")
 	reqLogger.Info("Start creating token secret")
 
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	tokenSecret := enforcerHelper.CreateKETokenSecret(cr.Name,
 		cr.Namespace,
 		"aqua-kube-enforcer-token",
@@ -956,11 +956,11 @@ func (r *AquaLightningReconciler) addKESecretToken(cr *operatorv1alpha1.AquaKube
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) addKESecretSSL(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKESecretSSL(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create SSL Secret")
 	reqLogger.Info("Start creating ssl secret")
 
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	sslSecret := enforcerHelper.CreateKESSLSecret(cr.Name,
 		cr.Namespace,
 		"kube-enforcer-ssl",
@@ -993,11 +993,11 @@ func (r *AquaLightningReconciler) addKESecretSSL(cr *operatorv1alpha1.AquaKubeEn
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) addKEService(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) addKEService(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Service")
 	reqLogger.Info("Start creating service")
 
-	enforcerHelper := newAquaKubeEnforcerHelper(cr)
+	enforcerHelper := newAquaLightningHelper(cr)
 	service := enforcerHelper.CreateKEService(cr.Name,
 		cr.Namespace,
 		consts.AquaKubeEnforcerClusterRoleBidingName,
@@ -1028,7 +1028,7 @@ func (r *AquaLightningReconciler) addKEService(cr *operatorv1alpha1.AquaKubeEnfo
 	return reconcile.Result{Requeue: true}, nil
 }
 
-func (r *AquaLightningReconciler) CreateImagePullSecret(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) CreateImagePullSecret(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Image Pull Secret")
 	reqLogger.Info("Start creating aqua images pull secret")
 
@@ -1067,12 +1067,12 @@ func (r *AquaLightningReconciler) CreateImagePullSecret(cr *operatorv1alpha1.Aqu
 
 // Starboard functions
 
-func (r *AquaLightningReconciler) installAquaStarboard(cr *operatorv1alpha1.AquaKubeEnforcer) (reconcile.Result, error) {
+func (r *AquaLightningReconciler) installAquaStarboard(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
 	reqLogger := log.WithValues("KubeEnforcer AquaStarboard Phase", "Install Aqua Starboard")
 	reqLogger.Info("Start installing AquaStarboard")
 
 	// Define a new AquaServer object
-	aquaStarboardHelper := newAquaKubeEnforcerHelper(cr)
+	aquaStarboardHelper := newAquaLightningHelper(cr)
 
 	aquasb := aquaStarboardHelper.newStarboard(cr)
 
@@ -1131,7 +1131,7 @@ func (r *AquaLightningReconciler) installAquaStarboard(cr *operatorv1alpha1.Aqua
 
 // finalizers
 
-func (r *AquaLightningReconciler) KubeEnforcerFinalizer(cr *operatorv1alpha1.AquaKubeEnforcer) error {
+func (r *AquaLightningReconciler) KubeEnforcerFinalizer(cr *operatorv1alpha1.AquaLightning) error {
 	reqLogger := log.WithValues("KubeEnforcer Finalizer Phase", "Remove KE-Webhooks")
 	reqLogger.Info("Start removing ValidatingWebhookConfiguration")
 
