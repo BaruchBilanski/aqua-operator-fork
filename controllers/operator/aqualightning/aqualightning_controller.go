@@ -26,7 +26,10 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/aquasecurity/aqua-operator/apis/operator/v1alpha1"
+	"github.com/aquasecurity/aqua-operator/controllers/common"
+	"github.com/aquasecurity/aqua-operator/pkg/consts"
 	"github.com/aquasecurity/aqua-operator/pkg/utils/extra"
+	"github.com/aquasecurity/aqua-operator/pkg/utils/k8s/secrets"
 	corev1 "k8s.io/api/core/v1"
 	"math/big"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -115,7 +118,42 @@ func (r *AquaLightningReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 */
 
 func (r *AquaLightningReconciler) updateLightningObject(cr *v1alpha1.AquaLightning) *v1alpha1.AquaLightning {
-	//cr.Spec.Infrastructure = common.UpdateAquaInfrastructure(cr.Spec.Infrastructure, cr.Name, cr.Namespace)
+	version := cr.Spec.Enforcer.Infrastructure.Version
+	if len(version) == 0 {
+		version = consts.LatestVersion
+	}
+
+	if cr.Spec.Enforcer.EnforcerService == nil {
+		cr.Spec.Enforcer.EnforcerService = &v1alpha1.AquaService{
+			ImageData: &v1alpha1.AquaImage{
+				Repository: "enforcer",
+				Registry:   consts.Registry,
+				Tag:        version,
+				PullPolicy: consts.PullPolicy,
+			},
+		}
+	}
+
+	cr.Spec.Enforcer.Infrastructure = common.UpdateAquaInfrastructure(cr.Spec.Enforcer.Infrastructure, cr.Name, cr.Namespace)
+	cr.Spec.Common = common.UpdateAquaCommon(cr.Spec.Common, cr.Name, false, false)
+
+	if cr.Spec.Common != nil {
+		if len(cr.Spec.Common.ImagePullSecret) != 0 {
+			exist := secrets.CheckIfSecretExists(r.Client, cr.Spec.Common.ImagePullSecret, cr.Namespace)
+			if !exist {
+				cr.Spec.Common.ImagePullSecret = consts.EmptyString
+			}
+		}
+	}
+
+	if secrets.CheckIfSecretExists(r.Client, consts.MtlsAquaEnforcerSecretName, cr.Namespace) {
+		log.Info(fmt.Sprintf("%s secret found, enabling mtls", consts.MtlsAquaEnforcerSecretName))
+		cr.Spec.Enforcer.Mtls = true
+	}
+	if secrets.CheckIfSecretExists(r.Client, consts.MtlsAquaKubeEnforcerSecretName, cr.Namespace) {
+		log.Info(fmt.Sprintf("%s secret found, enabling mtls", consts.MtlsAquaKubeEnforcerSecretName))
+		cr.Spec.KubeEnforcer.Mtls = true
+	}
 	return cr
 }
 
