@@ -1,10 +1,11 @@
 package aqualightning
 
 import (
-	"fmt"
 	"github.com/aquasecurity/aqua-operator/apis/operator/v1alpha1"
 	"github.com/aquasecurity/aqua-operator/pkg/consts"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -84,11 +85,11 @@ func (lightning *AquaLightningHelper) newAquaKubeEnforcer(cr *v1alpha1.AquaLight
 		},
 		Spec: v1alpha1.AquaKubeEnforcerSpec{
 			Config: v1alpha1.AquaKubeEnforcerConfig{
-				GatewayAddress:  fmt.Sprintf("%s.%s:8443", fmt.Sprintf(consts.GatewayServiceName, cr.Name), cr.Namespace),
-				ClusterName:     "Default-cluster-name",
+				GatewayAddress:  cr.Spec.Global.GatewayAddress,
+				ClusterName:     cr.Spec.Global.ClusterName,
 				ImagePullSecret: cr.Spec.Common.ImagePullSecret,
 			},
-			Token:                  consts.DefaultKubeEnforcerToken,
+			Token:                  cr.Spec.KubeEnforcer.Token,
 			EnforcerUpdateApproved: cr.Spec.KubeEnforcer.EnforcerUpdateApproved,
 			AllowAnyVersion:        cr.Spec.KubeEnforcer.AllowAnyVersion,
 			ImageData: &v1alpha1.AquaImage{
@@ -116,6 +117,13 @@ func (lightning *AquaLightningHelper) newAquaEnforcer(cr *v1alpha1.AquaLightning
 			registry = cr.Spec.Enforcer.EnforcerService.ImageData.Registry
 		}
 	}
+	tag := consts.LatestVersion
+	if cr.Spec.KubeEnforcer.Infrastructure.Version != "" {
+		tag = cr.Spec.KubeEnforcer.Infrastructure.Version
+	}
+	gwParts := strings.Split(cr.Spec.Global.GatewayAddress, ":")
+	gatewayHost := gwParts[0]
+	gatewayPort, _ := strconv.ParseInt(gwParts[1], 10, 64)
 
 	labels := map[string]string{
 		"app":                cr.Name + "-enforcer",
@@ -141,17 +149,20 @@ func (lightning *AquaLightningHelper) newAquaEnforcer(cr *v1alpha1.AquaLightning
 			Infrastructure: cr.Spec.Enforcer.Infrastructure,
 			Common:         cr.Spec.Common,
 			Gateway: &v1alpha1.AquaGatewayInformation{
-				Host: fmt.Sprintf("%s-gateway", cr.Name),
-				Port: 8443,
+				Host: gatewayHost,
+				Port: gatewayPort,
 			},
 			Token: cr.Spec.Enforcer.Token,
 			Secret: &v1alpha1.AquaSecret{
-				Name: fmt.Sprintf("%s-enforcer-token", cr.Name),
-				Key:  "token",
+				Name: cr.Spec.Enforcer.Secret.Name,
+				Key:  cr.Spec.Enforcer.Secret.Key,
 			},
 			EnforcerService: &v1alpha1.AquaService{
 				ImageData: &v1alpha1.AquaImage{
-					Registry: registry,
+					Registry:   registry,
+					Repository: "enforcer",
+					Tag:        tag,
+					PullPolicy: "Always",
 				},
 				Resources: cr.Spec.Enforcer.EnforcerService.Resources,
 			},
