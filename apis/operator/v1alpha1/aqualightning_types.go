@@ -56,7 +56,7 @@ type AquaLightningKubeEnforcer struct {
 type AquaLightningEnforcer struct {
 	Infrastructure         *AquaInfrastructure `json:"infra"`
 	EnforcerService        *AquaService        `json:"deploy,required"`
-	Token                  string              `json:"token,required"`
+	Token                  string              `json:"token,omitempty"`
 	Secret                 *AquaSecret         `json:"secret,omitempty"`
 	Envs                   []corev1.EnvVar     `json:"env,omitempty"`
 	RunAsNonRoot           bool                `json:"runAsNonRoot,omitempty"`

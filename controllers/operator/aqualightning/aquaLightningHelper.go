@@ -113,7 +113,7 @@ func (lightning *AquaLightningHelper) newAquaEnforcer(cr *v1alpha1.AquaLightning
 	}
 
 	labels := map[string]string{
-		"app":                cr.Name + "-lightning",
+		"app":                cr.Name + "-enforcer",
 		"deployedby":         "aqua-operator",
 		"aquasecoperator_cr": cr.Name,
 		"aqua.component":     "enforcer",
@@ -139,6 +139,7 @@ func (lightning *AquaLightningHelper) newAquaEnforcer(cr *v1alpha1.AquaLightning
 				Host: fmt.Sprintf("%s-gateway", cr.Name),
 				Port: 8443,
 			},
+			Token: cr.Spec.Enforcer.Token,
 			Secret: &v1alpha1.AquaSecret{
 				Name: fmt.Sprintf("%s-enforcer-token", cr.Name),
 				Key:  "token",
