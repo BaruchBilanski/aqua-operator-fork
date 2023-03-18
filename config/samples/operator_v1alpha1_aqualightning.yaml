@@ -21,7 +21,7 @@ spec:
         tag: "2022.4"
         repository: kube-enforcer
         pullPolicy: Always
-      resources: # Optional: Set resources requests/limits for kube-enforcer
+      resources:
         limits:
           cpu: 800m
           memory: 500Mi
@@ -35,7 +35,7 @@ spec:
         imagePullSecret: starboard-registry
       deploy:
         replicas: 1
-    env:                                      # Optional: environment variables to add to the kube-enforcer
+    env:
     - name: "SOME ENV"
       value: "SOME ENV VALUE"
   enforcer:

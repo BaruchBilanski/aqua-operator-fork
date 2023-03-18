@@ -97,6 +97,11 @@ func (lightning *AquaLightningHelper) newAquaKubeEnforcer(cr *v1alpha1.AquaLight
 				Tag:        tag,
 				PullPolicy: "Always",
 			},
+
+			KubeEnforcerService: &v1alpha1.AquaService{
+				Resources: cr.Spec.KubeEnforcer.KubeEnforcerService.Resources,
+			},
+
 			DeployStarboard: &AquaStarboardDetails,
 		},
 	}
@@ -148,6 +153,7 @@ func (lightning *AquaLightningHelper) newAquaEnforcer(cr *v1alpha1.AquaLightning
 				ImageData: &v1alpha1.AquaImage{
 					Registry: registry,
 				},
+				Resources: cr.Spec.Enforcer.EnforcerService.Resources,
 			},
 			RunAsNonRoot:           cr.Spec.Enforcer.RunAsNonRoot,
 			EnforcerUpdateApproved: cr.Spec.Enforcer.EnforcerUpdateApproved,
