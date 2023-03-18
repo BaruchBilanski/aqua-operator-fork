@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -28,18 +29,43 @@ import (
 type AquaLightningSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Infrastructure         *AquaInfrastructure    `json:"infra,omitempty"`
-	Config                 AquaKubeEnforcerConfig `json:"config"`
-	Token                  string                 `json:"token,omitempty"`
-	RegistryData           *AquaDockerRegistry    `json:"registry,omitempty"`
-	ImageData              *AquaImage             `json:"image,omitempty"`
-	EnforcerUpdateApproved *bool                  `json:"updateEnforcer,omitempty"`
-	AllowAnyVersion        bool                   `json:"allowAnyVersion,omitempty"`
-	KubeEnforcerService    *AquaService           `json:"deploy,omitempty"`
-	Envs                   []corev1.EnvVar        `json:"env,omitempty"`
-	Mtls                   bool                   `json:"mtls,omitempty"`
-	DeployStarboard        *AquaStarboardDetails  `json:"starboard,omitempty"`
-	ConfigMapChecksum      string                 `json:"config_map_checksum,omitempty"`
+	Common       *AquaCommon                `json:"common"`
+	Global       *AquaLightningGlobal       `json:"global"`
+	KubeEnforcer *AquaLightningKubeEnforcer `json:"kubeEnforcer"`
+	Enforcer     *AquaLightningEnforcer     `json:"enforcer"`
+}
+
+type AquaLightningGlobal struct {
+	GatewayAddress string `json:"gateway_address,omitempty"`
+	ClusterName    string `json:"cluster_name,omitempty"`
+}
+
+type AquaLightningKubeEnforcer struct {
+	Infrastructure         *AquaInfrastructure   `json:"infra,omitempty"`
+	Token                  string                `json:"token,omitempty"`
+	RegistryData           *AquaDockerRegistry   `json:"registry,omitempty"`
+	ImageData              *AquaImage            `json:"image,omitempty"`
+	EnforcerUpdateApproved *bool                 `json:"updateEnforcer,omitempty"`
+	AllowAnyVersion        bool                  `json:"allowAnyVersion,omitempty"`
+	KubeEnforcerService    *AquaService          `json:"deploy,omitempty"`
+	Envs                   []corev1.EnvVar       `json:"env,omitempty"`
+	Mtls                   bool                  `json:"mtls,omitempty"`
+	DeployStarboard        *AquaStarboardDetails `json:"starboard,omitempty"`
+	ConfigMapChecksum      string                `json:"config_map_checksum,omitempty"`
+}
+
+type AquaLightningEnforcer struct {
+	Infrastructure         *AquaInfrastructure `json:"infra"`
+	EnforcerService        *AquaService        `json:"deploy,required"`
+	Token                  string              `json:"token,required"`
+	Secret                 *AquaSecret         `json:"secret,omitempty"`
+	Envs                   []corev1.EnvVar     `json:"env,omitempty"`
+	RunAsNonRoot           bool                `json:"runAsNonRoot,omitempty"`
+	EnforcerUpdateApproved *bool               `json:"updateEnforcer,omitempty"`
+	Mtls                   bool                `json:"mtls,omitempty"`
+	ConfigMapChecksum      string              `json:"config_map_checksum,omitempty"`
+	AquaExpressMode        bool                `json:"aqua_express_mode,omitempty"`
+	RhcosVersion           string              `json:"rhcosVersion,omitempty"`
 }
 
 // AquaLightningStatus defines the observed state of AquaLightning
@@ -48,11 +74,6 @@ type AquaLightningStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	State AquaDeploymentState `json:"state"`
 }
-
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
-//+kubebuilder:printcolumn:name="Age",type="date",JSONPath="..metadata.creationTimestamp",description="Aqua Lightning Age"
-//+kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.state",description="Aqua Lightning status"
 
 // AquaLightning is the Schema for the aquaLightnings API
 type AquaLightning struct {
@@ -63,13 +84,33 @@ type AquaLightning struct {
 	Status AquaLightningStatus `json:"status,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-
 // AquaLightningList contains a list of AquaLightning
 type AquaLightningList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []AquaLightning `json:"items"`
+}
+
+func (in *AquaLightning) DeepCopyObject() runtime.Object {
+	out := AquaLightning{}
+	out.TypeMeta = in.TypeMeta
+	out.ObjectMeta = in.ObjectMeta
+	out.Spec = *in.Spec.DeepCopy()
+	out.Status = *in.Status.DeepCopy()
+	return &out
+}
+
+func (in *AquaLightningList) DeepCopyObject() runtime.Object {
+	out := AquaLightningList{}
+	out.TypeMeta = in.TypeMeta
+	out.ListMeta = in.ListMeta
+	if in.Items != nil {
+		out.Items = make([]AquaLightning, len(in.Items))
+		for i := range in.Items {
+			out.Items[i] = *in.Items[i].DeepCopy()
+		}
+	}
+	return &out
 }
 
 func init() {

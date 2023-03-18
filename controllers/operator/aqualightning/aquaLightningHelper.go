@@ -2,19 +2,9 @@ package aqualightning
 
 import (
 	"fmt"
-	"github.com/aquasecurity/aqua-operator/apis/aquasecurity/v1alpha1"
-	operatorv1alpha1 "github.com/aquasecurity/aqua-operator/apis/operator/v1alpha1"
+	"github.com/aquasecurity/aqua-operator/apis/operator/v1alpha1"
 	"github.com/aquasecurity/aqua-operator/pkg/consts"
-	"github.com/aquasecurity/aqua-operator/pkg/utils/extra"
-	rbac2 "github.com/aquasecurity/aqua-operator/pkg/utils/k8s/rbac"
-	"os"
-
-	admissionv1 "k8s.io/api/admissionregistration/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 const (
@@ -23,7 +13,7 @@ const (
 
 // EnforcerParameters :
 type LightningParameters struct {
-	KubeEnforcer *operatorv1alpha1.AquaLightning
+	Lightning *v1alpha1.AquaLightning
 }
 
 // AquaEnforcerHelper :
@@ -31,9 +21,9 @@ type AquaLightningHelper struct {
 	Parameters LightningParameters
 }
 
-func newAquaLightningHelper(cr *operatorv1alpha1.AquaLightning) *AquaLightningHelper {
+func newAquaLightningHelper(cr *v1alpha1.AquaLightning) *AquaLightningHelper {
 	params := LightningParameters{
-		KubeEnforcer: cr,
+		Lightning: cr,
 	}
 
 	return &AquaLightningHelper{
@@ -41,864 +31,50 @@ func newAquaLightningHelper(cr *operatorv1alpha1.AquaLightning) *AquaLightningHe
 	}
 }
 
-func (enf *AquaLightningHelper) CreateKubeEnforcerClusterRole(name string, namespace string) *rbacv1.ClusterRole {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"pods",
-				"nodes",
-				"namespaces",
-				"deployments",
-				"statefulsets",
-				"jobs",
-				"cronjobs",
-				"daemonsets",
-				"replicasets",
-				"replicationcontrollers",
-				"clusterroles",
-				"clusterrolebindings",
-				"componentstatuses",
-				"services",
-			},
-			Verbs: []string{
-				"get", "list", "watch",
-			},
-		},
-		{
-			APIGroups: []string{
-				"aquasecurity.github.io",
-			},
-			Resources: []string{
-				"configauditreports",
-				"clusterconfigauditreports",
-			},
-			Verbs: []string{
-				"get", "list", "watch",
-			},
-		},
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"configmaps",
-			},
-			Verbs: []string{
-				"get", "list", "watch",
-			},
-		},
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"roles",
-				"rolebindings",
-				"clusterroles",
-				"clusterrolebindings",
-			},
-			Verbs: []string{
-				"get", "list", "watch",
-			},
-		},
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"customresourcedefinitions",
-			},
-			Verbs: []string{
-				"get", "list", "watch",
-			},
-		},
-		{
-			APIGroups: []string{
-				"operator.openshift.io",
-			},
-			Resources: []string{
-				"imagecontentsourcepolicies",
-			},
-			Verbs: []string{
-				"get", "list", "watch",
-			},
-		},
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"secrets",
-			},
-			Verbs: []string{
-				"get", "list", "watch", "create", "update", "delete",
-			},
-		},
+func (lightning *AquaLightningHelper) newAquaKubeEnforcer(cr *v1alpha1.AquaLightning) *v1alpha1.AquaKubeEnforcer {
+	registry := consts.Registry
+	if cr.Spec.KubeEnforcer.RegistryData != nil {
+		if len(cr.Spec.KubeEnforcer.RegistryData.URL) > 0 {
+			registry = cr.Spec.KubeEnforcer.RegistryData.URL
+		}
 	}
-
-	crole := rbac2.CreateClusterRole(name, namespace, "aqua-kube-enforcer", fmt.Sprintf("%s-rbac", "aqua-ke"), "Deploy Aqua Discovery Cluster Role", rules)
-
-	return crole
-}
-
-// CreateServiceAccount Create new service account
-func (enf *AquaLightningHelper) CreateKEServiceAccount(cr, namespace, app, name string) *corev1.ServiceAccount {
-	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description": "Service account for aqua kube-enforcer",
-	}
-	sa := &corev1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "core/v1",
-			Kind:       "ServiceAccount",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-	}
-
-	return sa
-}
-
-func (enf *AquaLightningHelper) CreateClusterRoleBinding(cr, namespace, name, app, sa, clusterrole string) *rbacv1.ClusterRoleBinding {
-	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description": "Deploy Aqua Cluster Role Binding",
-	}
-	crb := &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "rbac.authorization.k8s.io/v1",
-			Kind:       "ClusterRoleBinding",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      sa,
-				Namespace: namespace,
-			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     clusterrole,
-		},
-	}
-
-	return crb
-}
-
-func (enf *AquaLightningHelper) CreateKubeEnforcerRole(cr, namespace, name, app string) *rbacv1.Role {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"pods/log",
-			},
-			Verbs: []string{
-				"get", "list", "watch",
-			},
-		},
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"jobs",
-			},
-			Verbs: []string{
-				"create", "delete",
-			},
-		},
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"leases",
-			},
-			Verbs: []string{
-				"get", "list", "create", "update",
-			},
-		},
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"pods",
-			},
-			Verbs: []string{
-				"create", "delete",
-			},
-		},
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"secrets",
-			},
-			Verbs: []string{
-				"create", "delete",
-			},
-		},
-		{
-			APIGroups: []string{
-				"*",
-			},
-			Resources: []string{
-				"configmaps",
-			},
-			Verbs: []string{
-				"update", "create",
-			},
-		},
-	}
-	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description":              "KubeEnforcer Role",
-		"openshift.io/description": "A user who can search and scan images from an OpenShift integrated registry.",
-	}
-	role := &rbacv1.Role{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "rbac.authorization.k8s.io/v1",
-			Kind:       "Role",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Rules: rules,
-	}
-
-	return role
-}
-
-func (enf *AquaLightningHelper) CreateRoleBinding(cr, namespace, name, app, sa, role string) *rbacv1.RoleBinding {
-	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description": "Deploy Aqua Cluster Role Binding",
-	}
-	rb := &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "rbac.authorization.k8s.io/v1",
-			Kind:       "RoleBinding",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      sa,
-				Namespace: namespace,
-			},
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     role,
-		},
-	}
-
-	return rb
-}
-
-func (enf *AquaLightningHelper) CreateValidatingWebhook(cr, namespace, name, app, keService string, caBundle []byte) *admissionv1.ValidatingWebhookConfiguration {
-	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description": "Deploy Aqua ValidatingWebhookConfiguration",
-	}
-	rules := []admissionv1.RuleWithOperations{
-		{
-			Operations: []admissionv1.OperationType{
-				admissionv1.Create,
-				admissionv1.Update,
-			},
-			Rule: admissionv1.Rule{
-				APIGroups: []string{
-					"*",
-				},
-				APIVersions: []string{
-					"*",
-				},
-				Resources: []string{
-					"pods",
-					"deployments",
-					"replicasets",
-					"replicationcontrollers",
-					"statefulsets",
-					"daemonsets",
-					"jobs",
-					"cronjobs",
-					"configmaps",
-					"services",
-					"roles",
-					"rolebindings",
-					"clusterroles",
-					"clusterrolebindings",
-					"customresourcedefinitions",
-				},
-			},
-		},
-	}
-	servicePort := int32(443)
-	sideEffect := admissionv1.SideEffectClassNone
-	failurePolicy := admissionv1.Ignore
-	validWebhook := &admissionv1.ValidatingWebhookConfiguration{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "admissionregistration.k8s.io/v1",
-			Kind:       "ValidatingWebhookConfiguration",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Webhooks: []admissionv1.ValidatingWebhook{
-			{
-				Name:  "imageassurance.aquasec.com",
-				Rules: rules,
-				ClientConfig: admissionv1.WebhookClientConfig{
-					CABundle: caBundle,
-					Service: &admissionv1.ServiceReference{
-						Namespace: namespace,
-						Name:      keService,
-						Port:      &servicePort,
-					},
-				},
-				TimeoutSeconds:          extra.Int32Ptr(WebhookTimeout),
-				SideEffects:             &sideEffect,
-				AdmissionReviewVersions: []string{"v1beta1"},
-				FailurePolicy:           &failurePolicy,
-			},
-		},
-	}
-
-	return validWebhook
-}
-
-func (enf *AquaLightningHelper) CreateMutatingWebhook(cr, namespace, name, app, keService string, caBundle []byte) *admissionv1.MutatingWebhookConfiguration {
-	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description": "Deploy Aqua MutatingWebhookConfiguration",
-	}
-	rules := []admissionv1.RuleWithOperations{
-		{
-			Operations: []admissionv1.OperationType{
-				admissionv1.Create,
-				admissionv1.Update,
-			},
-			Rule: admissionv1.Rule{
-				APIGroups: []string{
-					"*",
-				},
-				APIVersions: []string{
-					"v1",
-				},
-				Resources: []string{
-					"pods",
-				},
-			},
-		},
-	}
-	mutatePath := "/mutate"
-	servicePort := int32(443)
-	sideEffect := admissionv1.SideEffectClassNone
-	failurePolicy := admissionv1.Ignore
-	mutateWebhook := &admissionv1.MutatingWebhookConfiguration{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "admissionregistration.k8s.io/v1",
-			Kind:       "MutatingWebhookConfiguration",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Webhooks: []admissionv1.MutatingWebhook{
-			{
-				Name:  "microenforcer.aquasec.com",
-				Rules: rules,
-				ClientConfig: admissionv1.WebhookClientConfig{
-					CABundle: caBundle,
-					Service: &admissionv1.ServiceReference{
-						Namespace: namespace,
-						Name:      keService,
-						Path:      &mutatePath,
-						Port:      &servicePort,
-					},
-				},
-				TimeoutSeconds:          extra.Int32Ptr(WebhookTimeout),
-				SideEffects:             &sideEffect,
-				AdmissionReviewVersions: []string{"v1beta1"},
-				FailurePolicy:           &failurePolicy,
-			},
-		},
-	}
-
-	return mutateWebhook
-}
-
-func (enf *AquaLightningHelper) CreateKEConfigMap(cr, namespace, name, app, gwAddress, clusterName string, starboard bool) *corev1.ConfigMap {
-	configMapData := map[string]string{
-		"AQUA_ENABLE_CACHE":            "yes",
-		"AQUA_CACHE_EXPIRATION_PERIOD": "60",
-		"TLS_SERVER_CERT_FILEPATH":     "/certs/aqua_ke.crt",
-		"TLS_SERVER_KEY_FILEPATH":      "/certs/aqua_ke.key",
-		"AQUA_GATEWAY_SECURE_ADDRESS":  gwAddress,
-		"AQUA_TLS_PORT":                "8443",
-		"CLUSTER_NAME":                 clusterName,
-		"AQUA_KB_SCAN_TAINTED_NODES":   "true",
-		"AQUA_KB_IMAGE_NAME":           consts.KubeBenchImageName,
-	}
-	if starboard {
-		configMapData["AQUA_KAP_ADD_ALL_CONTROL"] = "true"
-		configMapData["AQUA_WATCH_CONFIG_AUDIT_REPORT"] = "true"
+	tag := consts.LatestVersion
+	if cr.Spec.KubeEnforcer.Infrastructure.Version != "" {
+		tag = cr.Spec.KubeEnforcer.Infrastructure.Version
 	}
 
 	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description": "Deploy Aqua KubeEnfocer ConfigMap",
-	}
-	configMap := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "ConfigMap",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Data: configMapData,
-	}
-
-	return configMap
-}
-
-func (enf *AquaLightningHelper) CreateKETokenSecret(cr, namespace, name, app, token string) *corev1.Secret {
-	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description": "Deploy Aqua KubeEnfocer token secret",
-	}
-	tokenSecret := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Secret",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Data: map[string][]byte{
-			"token": []byte(token),
-		},
-	}
-
-	return tokenSecret
-}
-
-func (enf *AquaLightningHelper) CreateKESSLSecret(cr, namespace, name, app string, secretKey, secretCert []byte) *corev1.Secret {
-	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description": "Deploy Kube Enforcer SSL certificates to communicate with Kube API server",
-	}
-	sslSecret := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Secret",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Data: map[string][]byte{
-			"aqua_ke.key": secretKey,
-			"aqua_ke.crt": secretCert,
-		},
-	}
-
-	return sslSecret
-}
-
-func (enf *AquaLightningHelper) CreateKEService(cr, namespace, name, app string) *corev1.Service {
-	labels := map[string]string{
-		"app":                app,
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr,
-	}
-	annotations := map[string]string{
-		"description": "Deploy Kube Enforcer Service",
-	}
-	selectors := map[string]string{
-		"app": "aqua-kube-enforcer",
-	}
-
-	ports := []corev1.ServicePort{
-		{
-			Port:       443,
-			TargetPort: intstr.FromInt(8443),
-		},
-	}
-	service := &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "core/v1",
-			Kind:       "Service",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:     corev1.ServiceType(enf.Parameters.KubeEnforcer.Spec.KubeEnforcerService.ServiceType),
-			Selector: selectors,
-			Ports:    ports,
-		},
-	}
-
-	return service
-}
-
-func (enf *AquaLightningHelper) CreateKEDeployment(cr *operatorv1alpha1.AquaLightning, name, app, registry, tag, pullPolicy, repository string) *appsv1.Deployment {
-
-	image := os.Getenv("RELATED_IMAGE_KUBE_ENFORCER")
-	if image == "" {
-		image = fmt.Sprintf("%s/%s:%s", registry, repository, tag)
-	}
-
-	labels := map[string]string{
-		"app":                app,
+		"app":                cr.Name + "-lightning",
 		"deployedby":         "aqua-operator",
 		"aquasecoperator_cr": cr.Name,
 		"aqua.component":     "kubeenforcer",
 	}
 	annotations := map[string]string{
-		"description":       "Deploy Kube Enforcer Deployment",
-		"ConfigMapChecksum": cr.Spec.ConfigMapChecksum,
+		"description": "Deploy Aqua KubeEnforcer",
 	}
 
-	envVars := enf.getEnvVars(cr)
-	selectors := map[string]string{
-		"app": "aqua-kube-enforcer",
-	}
-
-	ports := []corev1.ContainerPort{
-		{
-			ContainerPort: 8443,
-			Protocol:      corev1.ProtocolTCP,
+	AquaStarboardDetails := v1alpha1.AquaStarboardDetails{
+		AllowAnyVersion: true,
+		Infrastructure: &v1alpha1.AquaInfrastructure{
+			Version:        consts.StarboardVersion,
+			ServiceAccount: "starboard-operator",
 		},
-		{
-			ContainerPort: 8080,
-			Protocol:      corev1.ProtocolTCP,
+		Config: v1alpha1.AquaStarboardConfig{
+			ImagePullSecret: "starboard-registry",
+		},
+		StarboardService: &v1alpha1.AquaService{
+			Replicas: 1,
+			ImageData: &v1alpha1.AquaImage{
+				Registry:   "docker.io/aquasec",
+				Repository: "starboard-operator",
+				PullPolicy: "IfNotPresent",
+			},
 		},
 	}
-	runAsUser := int64(11431)
-	runAsGroup := int64(11433)
-	fsGroup := int64(11433)
-
-	deployment := &appsv1.Deployment{
+	aquaKubeEnf := &v1alpha1.AquaKubeEnforcer{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: "apps/v1",
-			Kind:       "Deployment",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   cr.Namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Spec: appsv1.DeploymentSpec{
-			//Replicas: extra.Int32Ptr(int32(2)),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: selectors,
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: selectors,
-					Annotations: map[string]string{
-						"ConfigMapChecksum": cr.Spec.ConfigMapChecksum,
-					},
-				},
-				Spec: corev1.PodSpec{
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsUser:  &runAsUser,
-						RunAsGroup: &runAsGroup,
-						FSGroup:    &fsGroup,
-					},
-					ServiceAccountName: cr.Spec.Infrastructure.ServiceAccount,
-					ImagePullSecrets: []corev1.LocalObjectReference{
-						{
-							Name: cr.Spec.Config.ImagePullSecret,
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "kube-enforcer-ssl",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: "kube-enforcer-ssl",
-									Items: []corev1.KeyToPath{
-										{
-											Key:  "aqua_ke.crt",
-											Path: "aqua_ke.crt",
-										},
-										{
-											Key:  "aqua_ke.key",
-											Path: "aqua_ke.key",
-										},
-									},
-								},
-							},
-						},
-					},
-					Containers: []corev1.Container{
-						{
-							Name:            "kube-enforcer",
-							Image:           image,
-							ImagePullPolicy: corev1.PullPolicy(pullPolicy),
-							LivenessProbe: &corev1.Probe{
-								FailureThreshold: 3,
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/healthz",
-										Port: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: int32(8080),
-										},
-										Scheme: "HTTP",
-									},
-								},
-								InitialDelaySeconds: 60,
-								PeriodSeconds:       30,
-								SuccessThreshold:    1,
-								TimeoutSeconds:      1,
-							},
-							ReadinessProbe: &corev1.Probe{
-								FailureThreshold: 3,
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/readyz",
-										Port: intstr.IntOrString{
-											Type:   intstr.Int,
-											IntVal: int32(8080),
-										},
-										Scheme: "HTTP",
-									},
-								},
-								InitialDelaySeconds: 60,
-								PeriodSeconds:       30,
-								SuccessThreshold:    1,
-								TimeoutSeconds:      1,
-							},
-							Ports: ports,
-							Env:   envVars,
-							EnvFrom: []corev1.EnvFromSource{
-								{
-									ConfigMapRef: &corev1.ConfigMapEnvSource{
-										LocalObjectReference: corev1.LocalObjectReference{
-											Name: "aqua-csp-kube-enforcer",
-										},
-									},
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "kube-enforcer-ssl",
-									MountPath: "/certs",
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	kubeEnforcerExtraData := enf.Parameters.KubeEnforcer.Spec.KubeEnforcerService
-
-	if kubeEnforcerExtraData.Resources != nil {
-		deployment.Spec.Template.Spec.Containers[0].Resources = *kubeEnforcerExtraData.Resources
-	}
-
-	if kubeEnforcerExtraData.LivenessProbe != nil {
-		deployment.Spec.Template.Spec.Containers[0].LivenessProbe = kubeEnforcerExtraData.LivenessProbe
-	}
-
-	if kubeEnforcerExtraData.ReadinessProbe != nil {
-		deployment.Spec.Template.Spec.Containers[0].ReadinessProbe = kubeEnforcerExtraData.ReadinessProbe
-	}
-
-	if kubeEnforcerExtraData.VolumeMounts != nil {
-		deployment.Spec.Template.Spec.Containers[0].VolumeMounts = append(deployment.Spec.Template.Spec.Containers[0].VolumeMounts, kubeEnforcerExtraData.VolumeMounts...)
-	}
-
-	if kubeEnforcerExtraData.Volumes != nil {
-		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, kubeEnforcerExtraData.Volumes...)
-	}
-
-	if enf.Parameters.KubeEnforcer.Spec.Envs != nil {
-		deployment.Spec.Template.Spec.Containers[0].Env = append(deployment.Spec.Template.Spec.Containers[0].Env, enf.Parameters.KubeEnforcer.Spec.Envs...)
-	}
-
-	if cr.Spec.Mtls {
-		mtlsAquaKubeEnforcerVolumeMount := []corev1.VolumeMount{
-			{
-				Name:      "aqua-grpc-kube-enforcer",
-				MountPath: "/opt/aquasec/ssl",
-			},
-		}
-
-		secretVolumeSource := corev1.SecretVolumeSource{
-			SecretName: "aqua-grpc-kube-enforcer",
-		}
-
-		mtlsAquaKubeEnforcerVolume := []corev1.Volume{
-			{
-				Name: "aqua-grpc-kube-enforcer",
-				VolumeSource: corev1.VolumeSource{
-					Secret: &secretVolumeSource,
-				},
-			},
-		}
-		deployment.Spec.Template.Spec.Containers[0].VolumeMounts = append(deployment.Spec.Template.Spec.Containers[0].VolumeMounts, mtlsAquaKubeEnforcerVolumeMount...)
-		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, mtlsAquaKubeEnforcerVolume...)
-	}
-
-	return deployment
-}
-
-func (ebf *AquaLightningHelper) getEnvVars(cr *operatorv1alpha1.AquaLightning) []corev1.EnvVar {
-	result := []corev1.EnvVar{
-		{
-			Name: "AQUA_TOKEN",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: "aqua-kube-enforcer-token",
-					},
-					Key: "token",
-				},
-			},
-		},
-		{
-			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		},
-	}
-
-	if cr.Spec.Mtls {
-		mtlsKubeEnforcerEnv := []corev1.EnvVar{
-			{
-				Name:  "AQUA_PRIVATE_KEY",
-				Value: "/opt/aquasec/ssl/aqua_kube-enforcer.key",
-			},
-			{
-				Name:  "AQUA_PUBLIC_KEY",
-				Value: "/opt/aquasec/ssl/aqua_kube-enforcer.crt",
-			},
-			{
-				Name:  "AQUA_ROOT_CA",
-				Value: "/opt/aquasec/ssl/rootCA.crt",
-			},
-			{
-				Name:  "AQUA_TLS_VERIFY",
-				Value: "true",
-			},
-		}
-		result = append(result, mtlsKubeEnforcerEnv...)
-	}
-
-	return result
-}
-
-// Starboard functions
-
-func (ebf *AquaLightningHelper) newStarboard(cr *operatorv1alpha1.AquaLightning) *v1alpha1.AquaStarboard {
-
-	_, registry, repository, tag := extra.GetImageData("kube-enforcer", cr.Spec.Infrastructure.Version, cr.Spec.KubeEnforcerService.ImageData, cr.Spec.AllowAnyVersion)
-
-	labels := map[string]string{
-		"app":                cr.Name + "-kube-enforcer",
-		"deployedby":         "aqua-operator",
-		"aquasecoperator_cr": cr.Name,
-	}
-	annotations := map[string]string{
-		"description": "Deploy Aqua Starboard",
-	}
-
-	aquasb := &v1alpha1.AquaStarboard{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "aquasecurity.github.io/v1alpha1",
-			Kind:       "AquaStarboard",
+			APIVersion: "operator.aquasec.com/v1alpha1",
+			Kind:       "AquaKubeEnforcer",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        cr.Name,
@@ -906,25 +82,76 @@ func (ebf *AquaLightningHelper) newStarboard(cr *operatorv1alpha1.AquaLightning)
 			Labels:      labels,
 			Annotations: annotations,
 		},
-		Spec: v1alpha1.AquaStarboardSpec{
-			Infrastructure:                cr.Spec.DeployStarboard.Infrastructure,
-			AllowAnyVersion:               cr.Spec.DeployStarboard.AllowAnyVersion,
-			StarboardService:              cr.Spec.DeployStarboard.StarboardService,
-			Config:                        cr.Spec.DeployStarboard.Config,
-			RegistryData:                  cr.Spec.DeployStarboard.RegistryData,
-			ImageData:                     cr.Spec.DeployStarboard.ImageData,
-			Envs:                          cr.Spec.DeployStarboard.Envs,
-			KubeEnforcerVersion:           fmt.Sprintf("%s/%s:%s", registry, repository, tag),
-			LogDevMode:                    cr.Spec.DeployStarboard.LogDevMode,
-			ConcurrentScanJobsLimit:       cr.Spec.DeployStarboard.ConcurrentScanJobsLimit,
-			ScanJobRetryAfter:             cr.Spec.DeployStarboard.ScanJobRetryAfter,
-			MetricsBindAddress:            cr.Spec.DeployStarboard.MetricsBindAddress,
-			HealthProbeBindAddress:        cr.Spec.DeployStarboard.HealthProbeBindAddress,
-			CisKubernetesBenchmarkEnabled: cr.Spec.DeployStarboard.CisKubernetesBenchmarkEnabled,
-			VulnerabilityScannerEnabled:   cr.Spec.DeployStarboard.VulnerabilityScannerEnabled,
-			BatchDeleteLimit:              cr.Spec.DeployStarboard.BatchDeleteLimit,
-			BatchDeleteDelay:              cr.Spec.DeployStarboard.BatchDeleteLimit,
+		Spec: v1alpha1.AquaKubeEnforcerSpec{
+			Config: v1alpha1.AquaKubeEnforcerConfig{
+				GatewayAddress:  fmt.Sprintf("%s.%s:8443", fmt.Sprintf(consts.GatewayServiceName, cr.Name), cr.Namespace),
+				ClusterName:     "Default-cluster-name",
+				ImagePullSecret: cr.Spec.Common.ImagePullSecret,
+			},
+			Token:                  consts.DefaultKubeEnforcerToken,
+			EnforcerUpdateApproved: cr.Spec.KubeEnforcer.EnforcerUpdateApproved,
+			AllowAnyVersion:        cr.Spec.KubeEnforcer.AllowAnyVersion,
+			ImageData: &v1alpha1.AquaImage{
+				Registry:   registry,
+				Repository: "kube-enforcer",
+				Tag:        tag,
+				PullPolicy: "Always",
+			},
+			DeployStarboard: &AquaStarboardDetails,
 		},
 	}
-	return aquasb
+
+	return aquaKubeEnf
+}
+
+func (lightning *AquaLightningHelper) newAquaEnforcer(cr *v1alpha1.AquaLightning) *v1alpha1.AquaEnforcer {
+	registry := consts.Registry
+	if cr.Spec.Enforcer.EnforcerService.ImageData != nil {
+		if len(cr.Spec.Enforcer.EnforcerService.ImageData.Registry) > 0 {
+			registry = cr.Spec.Enforcer.EnforcerService.ImageData.Registry
+		}
+	}
+
+	labels := map[string]string{
+		"app":                cr.Name + "-lightning",
+		"deployedby":         "aqua-operator",
+		"aquasecoperator_cr": cr.Name,
+		"aqua.component":     "enforcer",
+	}
+	annotations := map[string]string{
+		"description": "Deploy Aqua Enforcer",
+	}
+	aquaenf := &v1alpha1.AquaEnforcer{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "operator.aquasec.com/v1alpha1",
+			Kind:       "AquaEnforcer",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        cr.Name,
+			Namespace:   cr.Namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec: v1alpha1.AquaEnforcerSpec{
+			Infrastructure: cr.Spec.Enforcer.Infrastructure,
+			Common:         cr.Spec.Common,
+			Gateway: &v1alpha1.AquaGatewayInformation{
+				Host: fmt.Sprintf("%s-gateway", cr.Name),
+				Port: 8443,
+			},
+			Secret: &v1alpha1.AquaSecret{
+				Name: fmt.Sprintf("%s-enforcer-token", cr.Name),
+				Key:  "token",
+			},
+			EnforcerService: &v1alpha1.AquaService{
+				ImageData: &v1alpha1.AquaImage{
+					Registry: registry,
+				},
+			},
+			RunAsNonRoot:           cr.Spec.Enforcer.RunAsNonRoot,
+			EnforcerUpdateApproved: cr.Spec.Enforcer.EnforcerUpdateApproved,
+		},
+	}
+
+	return aquaenf
 }

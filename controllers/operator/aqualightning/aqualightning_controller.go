@@ -24,36 +24,27 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	syserrors "errors"
 	"fmt"
-	"github.com/aquasecurity/aqua-operator/apis/aquasecurity/v1alpha1"
-	"github.com/aquasecurity/aqua-operator/controllers/common"
-	"github.com/aquasecurity/aqua-operator/pkg/consts"
+	"github.com/aquasecurity/aqua-operator/apis/operator/v1alpha1"
 	"github.com/aquasecurity/aqua-operator/pkg/utils/extra"
-	"github.com/aquasecurity/aqua-operator/pkg/utils/k8s"
-	"github.com/aquasecurity/aqua-operator/pkg/utils/k8s/rbac"
-	"github.com/aquasecurity/aqua-operator/pkg/utils/k8s/secrets"
-	"github.com/banzaicloud/k8s-objectmatcher/patch"
-	admissionv1 "k8s.io/api/admissionregistration/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
+	"math/big"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+
+	//"github.com/aquasecurity/aqua-operator/controllers/common"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"math/big"
 	"reflect"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	ctrl "sigs.k8s.io/controller-runtime"
+	//ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	operatorv1alpha1 "github.com/aquasecurity/aqua-operator/apis/operator/v1alpha1"
 )
 
 var log = logf.Log.WithName("controller_aqualightning")
@@ -72,40 +63,12 @@ type KubeEnforcerCertificates struct {
 	ServerCert []byte
 }
 
-//+kubebuilder:rbac:groups=operator.aquasec.com,resources=aquakubeenforcers,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=operator.aquasec.com,resources=aquakubeenforcers/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=operator.aquasec.com,resources=aquakubeenforcers/finalizers,verbs=update
-//+kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
-//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=authorization.k8s.io,resources=clusterroles,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=authorization.k8s.io,resources=clusterrolebindings,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=authorization.k8s.io,resources=roles,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=validatingwebhookconfigurations,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=admissionregistration.k8s.io,resources=mutatingwebhookconfigurations,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// the AquaKubeEnforcer object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.0/pkg/reconcile
 func (r *AquaLightningReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
-	reqLogger.Info("Reconciling AquaKubeEnforcer")
+	reqLogger.Info("Reconciling AquaLightning")
 
-	if r.Certs == nil {
-		reqLogger.Error(syserrors.New("Unable to create KubeEnforcer Certificates"), "Unable to create KubeEnforcer Certificates")
-		return reconcile.Result{}, nil
-	}
-	// Fetch the AquaKubeEnforcer instance
-	instance := &operatorv1alpha1.AquaLightning{}
+	// Fetch the AquaCsp instance
+	instance := &v1alpha1.AquaLightning{}
 	err := r.Client.Get(context.TODO(), req.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -118,158 +81,187 @@ func (r *AquaLightningReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return reconcile.Result{}, err
 	}
 
-	// Check if the Memcached instance is marked to be deleted, which is
-	// indicated by the deletion timestamp being set.
-	isMemcachedMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
-	if isMemcachedMarkedToBeDeleted {
-		if controllerutil.ContainsFinalizer(instance, consts.AquaKubeEnforcerFinalizer) {
-			// Run finalization logic for memcachedFinalizer. If the
-			// finalization logic fails, don't remove the finalizer so
-			// that we can retry during the next reconciliation.
-			if err := r.KubeEnforcerFinalizer(instance); err != nil {
-				return ctrl.Result{}, err
-			}
+	instance = r.updateLightningObject(instance)
 
-			// Remove KubeEnforcerFinalizer. Once all finalizers have been
-			// removed, the object will be deleted.
-			controllerutil.RemoveFinalizer(instance, consts.AquaKubeEnforcerFinalizer)
-			err := r.Update(ctx, instance)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
+	_, err = r.InstallAquaEnforcer(instance)
+	if err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, err
+	}
+
+	_, err = r.InstallAquaKubeEnforcer(instance)
+	if err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, err
+	}
+
+	waitForEnforcer := true
+	waitForKubeEnforcer := true
+
+	if !reflect.DeepEqual(v1alpha1.AquaDeploymentUpdateInProgress, instance.Status.State) &&
+		(waitForKubeEnforcer || waitForEnforcer) {
+		crStatus := r.WaitForEnforcersReady(instance, waitForEnforcer, waitForKubeEnforcer)
+		if !reflect.DeepEqual(instance.Status.State, crStatus) {
+			instance.Status.State = crStatus
+			_ = r.Client.Status().Update(context.Background(), instance)
 		}
-		return ctrl.Result{Requeue: true}, nil
-	}
-
-	// Add finalizer for this CR
-	if !controllerutil.ContainsFinalizer(instance, consts.AquaKubeEnforcerFinalizer) {
-		controllerutil.AddFinalizer(instance, consts.AquaKubeEnforcerFinalizer)
-		err = r.Update(ctx, instance)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
-	instance = r.updateKubeEnforcerObject(instance)
-	r.Client.Update(context.Background(), instance)
-
-	currentStatus := instance.Status.State
-	if !reflect.DeepEqual(operatorv1alpha1.AquaDeploymentStateRunning, currentStatus) &&
-		!reflect.DeepEqual(operatorv1alpha1.AquaEnforcerUpdatePendingApproval, currentStatus) &&
-		!reflect.DeepEqual(operatorv1alpha1.AquaEnforcerUpdateInProgress, currentStatus) {
-		instance.Status.State = operatorv1alpha1.AquaDeploymentStatePending
-		_ = r.Client.Status().Update(context.Background(), instance)
-	}
-
-	if instance.Spec.Config.ImagePullSecret == "" && !extra.IsMarketPlace() {
-		instance.Spec.Config.ImagePullSecret = "aqua-registry-secret"
-	}
-
-	if instance.Spec.RegistryData != nil {
-		_, err = r.CreateImagePullSecret(instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
-
-	instance.Spec.Infrastructure = common.UpdateAquaInfrastructure(instance.Spec.Infrastructure, consts.AquaKubeEnforcerClusterRoleBidingName, instance.Namespace)
-
-	_, err = r.addKubeEnforcerClusterRole(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.createAquaServiceAccount(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	//if strings.ToLower(instance.Spec.Infrastructure.Platform) == consts.OpenShiftPlatform &&
-	//	rbac.CheckIfClusterRoleExists(r.Client, consts.ClusterReaderRole) &&
-	//	!rbac.CheckIfClusterRoleBindingExists(r.Client, consts.AquaKubeEnforcerSAClusterReaderRoleBind) {
-	//	_, err = r.CreateClusterReaderRoleBinding(instance)
-	//	if err != nil {
-	//		return reconcile.Result{}, err
-	//	}
-	//}
-
-	instance.Spec.KubeEnforcerService = r.updateKubeEnforcerServerObject(instance.Spec.KubeEnforcerService, instance.Spec.ImageData)
-
-	_, err = r.addKEClusterRoleBinding(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.addKubeEnforcerRole(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.addKERoleBinding(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.addKEValidatingWebhook(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.addKEMutatingWebhook(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.addKEConfigMap(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.addKESecretToken(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.addKESecretSSL(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.addKEService(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	_, err = r.addKEDeployment(instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	if instance.Spec.DeployStarboard != nil {
-		r.installAquaStarboard(instance)
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, nil
 	}
 
 	return ctrl.Result{}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *AquaLightningReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		Named("aqualightning-controller").
-		WithOptions(controller.Options{Reconciler: r}).
-		Owns(&corev1.Secret{}).
-		Owns(&corev1.ServiceAccount{}).
-		Owns(&rbacv1.Role{}).
-		Owns(&rbacv1.RoleBinding{}).
-		Owns(&appsv1.Deployment{}).
-		Owns(&corev1.Service{}).
-		Owns(&rbacv1.ClusterRole{}).
-		Owns(&rbacv1.ClusterRoleBinding{}).
-		Owns(&admissionv1.ValidatingWebhookConfiguration{}).
-		Owns(&admissionv1.MutatingWebhookConfiguration{}).
-		Owns(&corev1.ConfigMap{}).
-		For(&operatorv1alpha1.AquaLightning{}).
-		Complete(r)
+/*	----------------------------------------------------------------------------------------------------------------
+							Aqua Lightning
+	----------------------------------------------------------------------------------------------------------------
+*/
+
+func (r *AquaLightningReconciler) updateLightningObject(cr *v1alpha1.AquaLightning) *v1alpha1.AquaLightning {
+	//cr.Spec.Infrastructure = common.UpdateAquaInfrastructure(cr.Spec.Infrastructure, cr.Name, cr.Namespace)
+	return cr
+}
+
+func (r *AquaLightningReconciler) InstallAquaKubeEnforcer(cr *v1alpha1.AquaLightning) (reconcile.Result, error) {
+	reqLogger := log.WithValues("CSP - AquaKubeEnforcer Phase", "Install Aqua Enforcer")
+	reqLogger.Info("Start installing AquaKubeEnforcer")
+
+	// Define a new AquaEnforcer object
+	lightningHelper := newAquaLightningHelper(cr)
+	enforcer := lightningHelper.newAquaKubeEnforcer(cr)
+
+	// Set AquaCsp instance as the owner and controller
+	if err := controllerutil.SetControllerReference(cr, enforcer, r.Scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Check if this AquaKubeEnforcer already exists
+	found := &v1alpha1.AquaKubeEnforcer{}
+	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: enforcer.Name, Namespace: enforcer.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		reqLogger.Info("Creating a New Aqua KubeEnforcer", "AquaKubeEnforcer.Namespace", enforcer.Namespace, "AquaKubeEnforcer.Name", enforcer.Name)
+		err = r.Client.Create(context.TODO(), enforcer)
+		if err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, err
+		}
+
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, nil
+	} else if err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, err
+	}
+	// AquaEnforcer already exists - don't requeue
+
+	if found != nil {
+		update := !reflect.DeepEqual(enforcer.Spec, found.Spec)
+
+		reqLogger.Info("Checking for AquaKubeEnforcer Upgrade", "kube-enforcer", enforcer.Spec, "found", found.Spec, "update bool", update)
+		if update {
+			found.Spec = *(enforcer.Spec.DeepCopy())
+			err = r.Client.Update(context.Background(), found)
+			if err != nil {
+				reqLogger.Error(err, "Aqua CSP: Failed to update AquaKubeEnforcer.", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
+				return reconcile.Result{}, err
+			}
+			// Spec updated - return and requeue
+			return reconcile.Result{Requeue: true}, nil
+		}
+
+	}
+
+	reqLogger.Info("Skip reconcile: Aqua KubeEnforcer Exists", "AquaKubeEnforcer.Namespace", found.Namespace, "AquaKubeEnforcer.Name", found.Name)
+	return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, nil
+}
+
+func (r *AquaLightningReconciler) InstallAquaEnforcer(cr *v1alpha1.AquaLightning) (reconcile.Result, error) {
+	reqLogger := log.WithValues("Lightning - AquaEnforcer Phase", "Install Aqua Enforcer")
+	reqLogger.Info("Start installing AquaEnforcer")
+
+	// Define a new AquaEnforcer object
+	lightningHelper := newAquaLightningHelper(cr)
+	enforcer := lightningHelper.newAquaEnforcer(cr)
+
+	// Set AquaCsp instance as the owner and controller
+	if err := controllerutil.SetControllerReference(cr, enforcer, r.Scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Check if this AquaEnforcer already exists
+	found := &v1alpha1.AquaEnforcer{}
+	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: enforcer.Name, Namespace: enforcer.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		reqLogger.Info("Creating a New Aqua Enforcer", "AquaEnforcer.Namespace", enforcer.Namespace, "AquaEnforcer.Name", enforcer.Name)
+		err = r.Client.Create(context.TODO(), enforcer)
+		if err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, err
+		}
+
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, nil
+	} else if err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, err
+	}
+	// AquaEnforcer already exists - don't requeue
+
+	if found != nil {
+		update := !reflect.DeepEqual(enforcer.Spec, found.Spec)
+
+		reqLogger.Info("Checking for AquaEnforcer Upgrade", "enforcer", enforcer.Spec, "found", found.Spec, "update bool", update)
+		if update {
+			found.Spec = *(enforcer.Spec.DeepCopy())
+			err = r.Client.Update(context.Background(), found)
+			if err != nil {
+				reqLogger.Error(err, "Aqua CSP: Failed to update AquaEnforcer.", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
+				return reconcile.Result{}, err
+			}
+			// Spec updated - return and requeue
+			return reconcile.Result{Requeue: true}, nil
+		}
+	}
+
+	reqLogger.Info("Skip reconcile: Aqua Enforcer Exists", "AquaEnforcer.Namespace", found.Namespace, "AquaEnforcer.Name", found.Name)
+	return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, nil
+}
+
+func (r *AquaLightningReconciler) WaitForEnforcersReady(cr *v1alpha1.AquaLightning, validateEnforcer, validateKubeEnforcer bool) v1alpha1.AquaDeploymentState {
+	reqLogger := log.WithValues("CSP - AquaEnforcers Phase", "Wait For Aqua Enforcer and KubeEnforcer")
+	reqLogger.Info("Start waiting to aqua enforcer and kube-enforcer")
+
+	enforcerStatus := v1alpha1.AquaDeploymentStateRunning
+	if validateEnforcer {
+		enforcerFound := &v1alpha1.AquaEnforcer{}
+		err := r.Client.Get(context.TODO(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, enforcerFound)
+		if err != nil {
+			reqLogger.Info("Unable to Get AquaEnforcer Object", "err", err)
+			enforcerStatus = v1alpha1.AquaDeploymentStatePending
+		} else {
+			enforcerStatus = enforcerFound.Status.State
+		}
+
+	}
+
+	kubeEnforcerStatus := v1alpha1.AquaDeploymentStateRunning
+	if validateKubeEnforcer {
+		kubeEnforcerFound := &v1alpha1.AquaKubeEnforcer{}
+		err := r.Client.Get(context.TODO(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, kubeEnforcerFound)
+		if err != nil {
+			reqLogger.Info("Unable to Get AquaKubeEnforcer Object", "err", err)
+			kubeEnforcerStatus = v1alpha1.AquaDeploymentStatePending
+		} else {
+			kubeEnforcerStatus = kubeEnforcerFound.Status.State
+		}
+
+	}
+
+	returnStatus := v1alpha1.AquaDeploymentStateRunning
+
+	if reflect.DeepEqual(v1alpha1.AquaDeploymentStatePending, enforcerStatus) ||
+		reflect.DeepEqual(v1alpha1.AquaDeploymentStatePending, kubeEnforcerStatus) {
+		returnStatus = v1alpha1.AquaEnforcerWaiting
+	} else if reflect.DeepEqual(v1alpha1.AquaEnforcerUpdateInProgress, enforcerStatus) ||
+		reflect.DeepEqual(v1alpha1.AquaEnforcerUpdateInProgress, kubeEnforcerStatus) {
+		returnStatus = v1alpha1.AquaEnforcerUpdateInProgress
+	} else if reflect.DeepEqual(v1alpha1.AquaEnforcerUpdatePendingApproval, enforcerStatus) ||
+		reflect.DeepEqual(v1alpha1.AquaEnforcerUpdatePendingApproval, kubeEnforcerStatus) {
+		returnStatus = v1alpha1.AquaEnforcerUpdatePendingApproval
+	}
+
+	return returnStatus
 }
 
 /*	----------------------------------------------------------------------------------------------------------------
@@ -392,841 +384,21 @@ func createKECerts() (*KubeEnforcerCertificates, error) {
 	return certs, nil
 }
 
-/*
-----------------------------------------------------------------------------------------------------------------
-
-	Aqua Kube-Enforcer
-
-----------------------------------------------------------------------------------------------------------------
-*/
-func (r *AquaLightningReconciler) updateKubeEnforcerServerObject(serviceObject *operatorv1alpha1.AquaService, kubeEnforcerImageData *operatorv1alpha1.AquaImage) *operatorv1alpha1.AquaService {
-
-	if serviceObject == nil {
-		serviceObject = &operatorv1alpha1.AquaService{
-			ImageData:   kubeEnforcerImageData,
-			ServiceType: string(corev1.ServiceTypeClusterIP),
-		}
-	} else {
-		if serviceObject.ImageData == nil {
-			serviceObject.ImageData = kubeEnforcerImageData
-		}
-		if len(serviceObject.ServiceType) == 0 {
-			serviceObject.ServiceType = string(corev1.ServiceTypeClusterIP)
-		}
-
-	}
-
-	return serviceObject
-}
-
-func (r *AquaLightningReconciler) updateKubeEnforcerObject(cr *operatorv1alpha1.AquaLightning) *operatorv1alpha1.AquaLightning {
-	if secrets.CheckIfSecretExists(r.Client, consts.MtlsAquaKubeEnforcerSecretName, cr.Namespace) {
-		log.Info(fmt.Sprintf("%s secret found, enabling mtls", consts.MtlsAquaKubeEnforcerSecretName))
-		cr.Spec.Mtls = true
-	}
-	return cr
-}
-
-func (r *AquaLightningReconciler) addKEDeployment(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Deployment Phase", "Create Deployment")
-	reqLogger.Info("Start creating deployment")
-
-	pullPolicy, registry, repository, tag := extra.GetImageData("kube-enforcer", cr.Spec.Infrastructure.Version, cr.Spec.KubeEnforcerService.ImageData, cr.Spec.AllowAnyVersion)
-
-	enforcerHelper := newAquaLightningHelper(cr)
-	deployment := enforcerHelper.CreateKEDeployment(cr,
-		consts.AquaKubeEnforcerClusterRoleBidingName,
-		"ke-deployment",
-		registry,
-		tag,
-		pullPolicy,
-		repository)
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, deployment, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this object already exists
-	found := &appsv1.Deployment{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
-		err = patch.DefaultAnnotator.SetLastAppliedAnnotation(deployment)
-		if err != nil {
-			reqLogger.Error(err, "Unable to set default for k8s-objectmatcher", err)
-		}
-
-		err = r.Client.Create(context.TODO(), deployment)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	if found != nil {
-
-		updateEnforcerApproved := true
-		if cr.Spec.EnforcerUpdateApproved != nil {
-			updateEnforcerApproved = *cr.Spec.EnforcerUpdateApproved
-		}
-
-		update, err := k8s.CheckForK8sObjectUpdate("AquaKubeEnforcer deployment", found, deployment)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		if update && updateEnforcerApproved {
-			err = r.Client.Update(context.Background(), deployment)
-			if err != nil {
-				reqLogger.Error(err, "Aqua KubeEnforcer: Failed to update Deployment.", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
-				return reconcile.Result{}, err
-			}
-			// Spec updated - return and requeue
-			return reconcile.Result{Requeue: true}, nil
-		} else if update && !updateEnforcerApproved {
-			cr.Status.State = operatorv1alpha1.AquaEnforcerUpdatePendingApproval
-			_ = r.Client.Status().Update(context.Background(), cr)
-		} else {
-			currentState := cr.Status.State
-			if !k8s.IsDeploymentReady(found, 1) {
-				if !reflect.DeepEqual(operatorv1alpha1.AquaEnforcerUpdateInProgress, currentState) &&
-					!reflect.DeepEqual(operatorv1alpha1.AquaDeploymentStatePending, currentState) {
-					cr.Status.State = operatorv1alpha1.AquaEnforcerUpdateInProgress
-					_ = r.Client.Status().Update(context.Background(), cr)
-				}
-			} else if !reflect.DeepEqual(operatorv1alpha1.AquaDeploymentStateRunning, currentState) {
-				cr.Status.State = operatorv1alpha1.AquaDeploymentStateRunning
-				_ = r.Client.Status().Update(context.Background(), cr)
-			}
-		}
-	}
-
-	// object already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua KubeEnforcer Deployment Exists", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
-	return reconcile.Result{}, nil
-}
-
-func (r *AquaLightningReconciler) addKubeEnforcerClusterRole(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Aqua KubeEnforcer Cluster Role")
-	reqLogger.Info("Start creating kube-enforcer cluster role")
-
-	enforcerHelper := newAquaLightningHelper(cr)
-	crole := enforcerHelper.CreateKubeEnforcerClusterRole(cr.Name, cr.Namespace)
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, crole, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this ClusterRole already exists
-	found := &rbacv1.ClusterRole{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: crole.Name}, found)
-
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New ClusterRole", "ClusterRole.Namespace", crole.Namespace, "ClusterRole.Name", crole.Name)
-		err = r.Client.Create(context.TODO(), crole)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if the ClusterRole Rules, matches the found Rules
-	equal, err := k8s.CompareByHash(crole.Rules, found.Rules)
-
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	if !equal {
-		found = crole
-		log.Info("Aqua KubeEnforcer: Updating ClusterRole", "ClusterRole.Namespace", found.Namespace, "ClusterRole.Name", found.Name)
-		err := r.Client.Update(context.TODO(), found)
-		if err != nil {
-			log.Error(err, "Failed to update ClusterRole", "ClusterRole.Namespace", found.Namespace, "ClusterRole.Name", found.Name)
-			return reconcile.Result{}, err
-		}
-
-		return reconcile.Result{Requeue: true}, nil
-	}
-
-	// ClusterRole already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua ClusterRole Exists", "ClusterRole.Namespace", found.Namespace, "ClusterRole.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) addKEClusterRoleBinding(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create ClusterRoleBinding")
-	reqLogger.Info("Start creating ClusterRole")
-
-	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaLightningHelper(cr)
-	crb := enforcerHelper.CreateClusterRoleBinding(cr.Name,
-		cr.Namespace,
-		consts.AquaKubeEnforcerClusterRoleBidingName,
-		"ke-crb",
-		cr.Spec.Infrastructure.ServiceAccount,
-		consts.AquaKubeEnforcerClusterRoleBidingName)
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, crb, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this ClusterRoleBinding already exists
-	found := &rbacv1.ClusterRoleBinding{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: crb.Name, Namespace: crb.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New ClusterRoleBinding", "ClusterRoleBinding.Namespace", crb.Namespace, "ClusterRoleBinding.Name", crb.Name)
-		err = r.Client.Create(context.TODO(), crb)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// ClusterRoleBinding already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua ClusterRoleBinding Exists", "ClusterRoleBinding.Namespace", found.Namespace, "ClusterRole.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) CreateClusterReaderRoleBinding(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create KubeEnforcer ClusterReaderRoleBinding")
-	reqLogger.Info("Start creating KubeEnforcer ClusterReaderRoleBinding")
-
-	crb := rbac.CreateClusterRoleBinding(
-		cr.Name,
-		cr.Namespace,
-		consts.AquaKubeEnforcerSAClusterReaderRoleBind,
-		fmt.Sprintf("%s-kube-enforcer-cluster-reader", cr.Name),
-		"Deploy Aqua KubeEnforcer Cluster Reader Role Binding",
-		"aqua-kube-enforcer-sa",
-		consts.ClusterReaderRole)
-
-	// Set AquaKube-enforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, crb, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this ClusterRoleBinding already exists
-	found := &rbacv1.ClusterRoleBinding{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: crb.Name}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New KubeEnfocer ClusterReaderRoleBinding", "ClusterReaderRoleBinding.Namespace", crb.Namespace, "ClusterReaderRoleBinding.Name", crb.Name)
-		err = r.Client.Create(context.TODO(), crb)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// ClusterRoleBinding already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua KubeEnforcer ClusterReaderRoleBinding Exists", "ClusterRoleBinding.Namespace", found.Namespace, "ClusterRole.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) createAquaServiceAccount(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Aqua KubeEnforcer Service Account")
-	reqLogger.Info("Start creating aqua kube-enforcer service account")
-
-	// Define a new service account object
-	enforcerHelper := newAquaLightningHelper(cr)
-	sa := enforcerHelper.CreateKEServiceAccount(cr.Name,
-		cr.Namespace,
-		fmt.Sprintf("%s-requirments", cr.Name),
-		cr.Spec.Infrastructure.ServiceAccount)
-
-	// Set AquaKubeEnforcerKind instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, sa, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this service account already exists
-	found := &corev1.ServiceAccount{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: sa.Name, Namespace: sa.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a New Aqua Service Account", "ServiceAccount.Namespace", sa.Namespace, "ServiceAccount.Name", sa.Name)
-		err = r.Client.Create(context.TODO(), sa)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Service account already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua Service Account Already Exists", "ServiceAccount.Namespace", found.Namespace, "ServiceAccount.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) addKubeEnforcerRole(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Aqua KubeEnforcer Role")
-	reqLogger.Info("Start creating kube-enforcer role")
-
-	enforcerHelper := newAquaLightningHelper(cr)
-	role := enforcerHelper.CreateKubeEnforcerRole(cr.Name, cr.Namespace, consts.AquaKubeEnforcerClusterRoleBidingName, fmt.Sprintf("%s-requirments", cr.Name))
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, role, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this Role already exists
-	found := &rbacv1.Role{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: role.Name, Namespace: role.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New ClusterRole", "ClusterRole.Namespace", role.Namespace, "ClusterRole.Name", role.Name)
-		err = r.Client.Create(context.TODO(), role)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if the Role Rules, matches the found Rules
-	equal, err := k8s.CompareByHash(role.Rules, found.Rules)
-
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	if !equal {
-		found = role
-		log.Info("Aqua KubeEnforcer: Updating Role", "Role.Namespace", found.Namespace, "Role.Name", found.Name)
-		err := r.Client.Update(context.TODO(), found)
-		if err != nil {
-			log.Error(err, "Failed to update Role", "Role.Namespace", found.Namespace, "Role.Name", found.Name)
-			return reconcile.Result{}, err
-		}
-
-		return reconcile.Result{Requeue: true}, nil
-	}
-
-	// ClusterRole already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua ClusterRole Exists", "ClusterRole.Namespace", found.Namespace, "ClusterRole.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) addKERoleBinding(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create RoleBinding")
-	reqLogger.Info("Start creating RoleBinding")
-
-	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaLightningHelper(cr)
-	rb := enforcerHelper.CreateRoleBinding(cr.Name,
-		cr.Namespace,
-		consts.AquaKubeEnforcerClusterRoleBidingName,
-		"ke-rb",
-		cr.Spec.Infrastructure.ServiceAccount,
-		consts.AquaKubeEnforcerClusterRoleBidingName)
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, rb, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this RoleBinding already exists
-	found := &rbacv1.RoleBinding{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: rb.Name, Namespace: rb.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New ClusterRoleBinding", "ClusterRoleBinding.Namespace", rb.Namespace, "ClusterRoleBinding.Name", rb.Name)
-		err = r.Client.Create(context.TODO(), rb)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// RoleBinding already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua RoleBinding Exists", "RoleBinding.Namespace", found.Namespace, "Role.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) addKEValidatingWebhook(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create ValidatingWebhookConfiguration")
-	reqLogger.Info("Start creating ValidatingWebhookConfiguration")
-
-	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaLightningHelper(cr)
-	validWebhook := enforcerHelper.CreateValidatingWebhook(cr.Name,
-		cr.Namespace,
-		consts.AquaKubeEnforcerValidatingWebhookConfigurationName,
-		"ke-validatingwebhook",
-		consts.AquaKubeEnforcerClusterRoleBidingName,
-		r.Certs.CACert)
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, validWebhook, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this ValidatingWebhookConfiguration already exists
-	found := &admissionv1.ValidatingWebhookConfiguration{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: validWebhook.Name, Namespace: validWebhook.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New ValidatingWebhookConfiguration", "ValidatingWebhook.Namespace", validWebhook.Namespace, "ClusterRoleBinding.Name", validWebhook.Name)
-		err = r.Client.Create(context.TODO(), validWebhook)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// ValidatingWebhookConfiguration already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua ValidatingWebhookConfiguration Exists", "ValidatingWebhookConfiguration.Namespace", found.Namespace, "ValidatingWebhookConfiguration.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) addKEMutatingWebhook(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create MutatingWebhookConfiguration")
-	reqLogger.Info("Start creating MutatingWebhookConfiguration")
-
-	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaLightningHelper(cr)
-	mutateWebhook := enforcerHelper.CreateMutatingWebhook(cr.Name,
-		cr.Namespace,
-		consts.AquaKubeEnforcerMutantingWebhookConfigurationName,
-		"ke-mutatingwebhook",
-		consts.AquaKubeEnforcerClusterRoleBidingName,
-		r.Certs.CACert)
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, mutateWebhook, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this ClusterRoleBinding already exists
-	found := &admissionv1.MutatingWebhookConfiguration{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: mutateWebhook.Name, Namespace: mutateWebhook.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New MutatingWebhookConfiguration", "MutatingWebhook.Namespace", mutateWebhook.Namespace, "ClusterRoleBinding.Name", mutateWebhook.Name)
-		err = r.Client.Create(context.TODO(), mutateWebhook)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// MutatingWebhookConfiguration already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua MutatingWebhookConfiguration Exists", "MutatingWebhookConfiguration.Namespace", found.Namespace, "MutatingWebhookConfiguration.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) addKEConfigMap(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create ConfigMap")
-	reqLogger.Info("Start creating ConfigMap")
-	//reqLogger.Info(fmt.Sprintf("cr object : %v", cr.ObjectMeta))
-
-	// Define a new ClusterRoleBinding object
-	enforcerHelper := newAquaLightningHelper(cr)
-	deployStarboard := false
-	if cr.Spec.DeployStarboard != nil {
-		deployStarboard = true
-	}
-	configMap := enforcerHelper.CreateKEConfigMap(cr.Name,
-		cr.Namespace,
-		"aqua-csp-kube-enforcer",
-		"ke-configmap",
-		cr.Spec.Config.GatewayAddress,
-		cr.Spec.Config.ClusterName,
-		deployStarboard)
-	// Adding configmap to the hashed data, for restart pods if token is changed
-	hash, err := extra.GenerateMD5ForSpec(configMap.Data)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	cr.Spec.ConfigMapChecksum += hash
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, configMap, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this ConfigMap already exists
-	foundConfigMap := &corev1.ConfigMap{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: configMap.Name, Namespace: configMap.Namespace}, foundConfigMap)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New ConfigMap", "ConfigMap.Namespace", configMap.Namespace, "ConfigMap.Name", configMap.Name)
-		err = r.Client.Create(context.TODO(), configMap)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if the ConfigMap Data, matches the found Data
-	if !equality.Semantic.DeepDerivative(configMap.Data, foundConfigMap.Data) {
-		foundConfigMap = configMap
-		log.Info("Aqua KubeEnforcer: Updating ConfigMap", "ConfigMap.Namespace", foundConfigMap.Namespace, "ConfigMap.Name", foundConfigMap.Name)
-		err := r.Client.Update(context.TODO(), foundConfigMap)
-		if err != nil {
-			log.Error(err, "Failed to update ConfigMap", "ConfigMap.Namespace", foundConfigMap.Namespace, "ConfigMap.Name", foundConfigMap.Name)
-			return reconcile.Result{}, err
-		}
-
-		return reconcile.Result{Requeue: true}, nil
-	}
-
-	// MutatingWebhookConfiguration already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua KubeEnforcer ConfigMap Exists", "ConfigMap.Namespace", foundConfigMap.Namespace, "ConfigMap.Name", foundConfigMap.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) addKESecretToken(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Token Secret")
-	reqLogger.Info("Start creating token secret")
-
-	enforcerHelper := newAquaLightningHelper(cr)
-	tokenSecret := enforcerHelper.CreateKETokenSecret(cr.Name,
-		cr.Namespace,
-		"aqua-kube-enforcer-token",
-		"ke-token-secret",
-		cr.Spec.Token)
-	// Adding secret to the hashed data, for restart pods if token is changed
-	hash, err := extra.GenerateMD5ForSpec(tokenSecret.Data)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	cr.Spec.ConfigMapChecksum += hash
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, tokenSecret, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this object already exists
-	found := &corev1.Secret{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: tokenSecret.Name, Namespace: tokenSecret.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New token secret", "Secret.Namespace", tokenSecret.Namespace, "Secret.Name", tokenSecret.Name)
-		err = r.Client.Create(context.TODO(), tokenSecret)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	if !equality.Semantic.DeepDerivative(tokenSecret.Data, found.Data) {
-		found = tokenSecret
-		log.Info("Aqua Enforcer: Updating KubeEnforcer Token Secret", "Secret.Namespace", found.Namespace, "Secret.Name", found.Name)
-		err := r.Client.Update(context.TODO(), found)
-		if err != nil {
-			log.Error(err, "Failed to update KubeEnforcer Token Secret", "Secret.Namespace", found.Namespace, "Secret.Name", found.Name)
-			return reconcile.Result{}, err
-		}
-
-		return reconcile.Result{Requeue: true}, nil
-	}
-
-	// object already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua KubeEnforcer Token Secret Exists", "Secret.Namespace", found.Namespace, "Secret.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) addKESecretSSL(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create SSL Secret")
-	reqLogger.Info("Start creating ssl secret")
-
-	enforcerHelper := newAquaLightningHelper(cr)
-	sslSecret := enforcerHelper.CreateKESSLSecret(cr.Name,
-		cr.Namespace,
-		"kube-enforcer-ssl",
-		"ke-ssl-secret",
-		r.Certs.ServerKey,
-		r.Certs.ServerCert)
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, sslSecret, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this object already exists
-	found := &corev1.Secret{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: sslSecret.Name, Namespace: sslSecret.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New ssl secret", "Secret.Namespace", sslSecret.Namespace, "Secret.Name", sslSecret.Name)
-		err = r.Client.Create(context.TODO(), sslSecret)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// object already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua KubeEnforcer SSL Secret Exists", "Secret.Namespace", found.Namespace, "Secret.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) addKEService(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Service")
-	reqLogger.Info("Start creating service")
-
-	enforcerHelper := newAquaLightningHelper(cr)
-	service := enforcerHelper.CreateKEService(cr.Name,
-		cr.Namespace,
-		consts.AquaKubeEnforcerClusterRoleBidingName,
-		"ke-service")
-
-	// Set AquaKubeEnforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, service, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this object already exists
-	found := &corev1.Service{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: Creating a New service", "Service.Namespace", service.Namespace, "Service.Name", service.Name)
-		err = r.Client.Create(context.TODO(), service)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// object already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua KubeEnforcer Service Exists", "Service.Namespace", found.Namespace, "Service.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-func (r *AquaLightningReconciler) CreateImagePullSecret(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer Requirements Phase", "Create Image Pull Secret")
-	reqLogger.Info("Start creating aqua images pull secret")
-
-	// Define a new secret object
-	secret := secrets.CreatePullImageSecret(
-		cr.Name,
-		cr.Namespace,
-		"ke-image-pull-secret",
-		cr.Spec.Config.ImagePullSecret,
-		*cr.Spec.RegistryData)
-
-	// Set AquaKubeEnforcerKind instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, secret, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this secret already exists
-	found := &corev1.Secret{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a New Aqua Image Pull Secret", "Secret.Namespace", secret.Namespace, "Secret.Name", secret.Name)
-		err = r.Client.Create(context.TODO(), secret)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Secret already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua Image Pull Secret Already Exists", "Secret.Namespace", found.Namespace, "Secret.Name", found.Name)
-	return reconcile.Result{Requeue: true}, nil
-}
-
-// Starboard functions
-
-func (r *AquaLightningReconciler) installAquaStarboard(cr *operatorv1alpha1.AquaLightning) (reconcile.Result, error) {
-	reqLogger := log.WithValues("KubeEnforcer AquaStarboard Phase", "Install Aqua Starboard")
-	reqLogger.Info("Start installing AquaStarboard")
-
-	// Define a new AquaServer object
-	aquaStarboardHelper := newAquaLightningHelper(cr)
-
-	aquasb := aquaStarboardHelper.newStarboard(cr)
-
-	// Set AquaKube-enforcer instance as the owner and controller
-	if err := controllerutil.SetControllerReference(cr, aquasb, r.Scheme); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Check if this AquaServer already exists
-	found := &v1alpha1.AquaStarboard{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: aquasb.Name, Namespace: aquasb.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a New Aqua AquaStarboard", "AquaStarboard.Namespace", aquasb.Namespace, "AquaStarboard.Name", aquasb.Name)
-		err = r.Client.Create(context.TODO(), aquasb)
-		if err != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, err
-		}
-
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, nil
-	} else if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, err
-	}
-
-	if found != nil {
-		size := aquasb.Spec.StarboardService.Replicas
-		if found.Spec.StarboardService.Replicas != size {
-			found.Spec.StarboardService.Replicas = size
-			err = r.Client.Update(context.Background(), found)
-			if err != nil {
-				reqLogger.Error(err, "Aqua Kube-enforcer: Failed to update aqua starboard replicas.", "AquaStarboard.Namespace", found.Namespace, "AquaStarboard.Name", found.Name)
-				return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, err
-			}
-			// Spec updated - return and requeue
-			return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, nil
-		}
-
-		update := !reflect.DeepEqual(aquasb.Spec, found.Spec)
-
-		reqLogger.Info("Checking for AquaStarboard Upgrade", "aquasb", aquasb.Spec, "found", found.Spec, "update bool", update)
-		if update {
-			found.Spec = *(aquasb.Spec.DeepCopy())
-			err = r.Client.Update(context.Background(), found)
-			if err != nil {
-				reqLogger.Error(err, "Aqua Kube-enforcer: Failed to update AquaStarboard.", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
-				return reconcile.Result{}, err
-			}
-			// Spec updated - return and requeue
-			return reconcile.Result{Requeue: true}, nil
-		}
-	}
-
-	// AquaStarboard already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Aqua Starboard Exists", "AquaStarboard.Namespace", found.Namespace, "AquaStarboard.Name", found.Name)
-	return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, nil
-}
-
-// finalizers
-
-func (r *AquaLightningReconciler) KubeEnforcerFinalizer(cr *operatorv1alpha1.AquaLightning) error {
-	reqLogger := log.WithValues("KubeEnforcer Finalizer Phase", "Remove KE-Webhooks")
-	reqLogger.Info("Start removing ValidatingWebhookConfiguration")
-
-	// Check if this ValidatingWebhookConfiguration exists
-	validatingWebhookConfiguration := &admissionv1.ValidatingWebhookConfiguration{}
-	err := r.Client.Get(context.TODO(), types.NamespacedName{Name: consts.AquaKubeEnforcerValidatingWebhookConfigurationName, Namespace: cr.Namespace}, validatingWebhookConfiguration)
-
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: ValidatingWebhookConfiguration is not found")
-	} else if err != nil {
-		return err
-	}
-
-	if validatingWebhookConfiguration != nil {
-		err = r.Client.Delete(context.TODO(), validatingWebhookConfiguration)
-		if err != nil {
-			return err
-		}
-		reqLogger.Info("Successfully removed ValidatingWebhookConfiguration")
-	}
-
-	// Check if this ValidatingWebhookConfiguration exists
-	reqLogger.Info("Start removing MutatingWebhookConfiguration")
-	mutatingWebhookConfiguration := &admissionv1.MutatingWebhookConfiguration{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: consts.AquaKubeEnforcerMutantingWebhookConfigurationName, Namespace: cr.Namespace}, mutatingWebhookConfiguration)
-
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: MutatingWebhookConfiguration is not found")
-	} else if err != nil {
-		return err
-	}
-
-	if mutatingWebhookConfiguration != nil {
-		err = r.Client.Delete(context.TODO(), mutatingWebhookConfiguration)
-		if err != nil {
-			return err
-		}
-		reqLogger.Info("Successfully removed MutatingWebhookConfiguration")
-	}
-
-	// Check if this ClusterRoleBinding exists
-	cRoleBinding := &rbacv1.ClusterRoleBinding{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: consts.AquaKubeEnforcerClusterRoleBidingName, Namespace: cr.Namespace}, cRoleBinding)
-
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: ClusterRoleBinding is not found")
-	} else if err != nil {
-		return err
-	}
-
-	if validatingWebhookConfiguration != nil {
-		err = r.Client.Delete(context.TODO(), cRoleBinding)
-		if err != nil {
-			return err
-		}
-		reqLogger.Info("Successfully removed clusterRoleBinding")
-	}
-
-	// Check if this ClusterReaderRoleBinding exists
-	cRoleReaderRoleBinding := &rbacv1.ClusterRoleBinding{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: consts.AquaKubeEnforcerSAClusterReaderRoleBind, Namespace: cr.Namespace}, cRoleReaderRoleBinding)
-
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: ClusterReaderRoleBinding is not found")
-	} else if err != nil {
-		return err
-	}
-
-	if validatingWebhookConfiguration != nil {
-		err = r.Client.Delete(context.TODO(), cRoleReaderRoleBinding)
-		if err != nil {
-			return err
-		}
-		reqLogger.Info("Successfully removed ClusterReaderRoleBinding")
-	}
-
-	// Check if this ClusterRole exists
-	cRole := &rbacv1.ClusterRole{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: consts.AquaKubeEnforcerClusterRoleName}, cRole)
-
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Aqua KubeEnforcer: ClusterRole is not found")
-	} else if err != nil {
-		return err
-	}
-
-	if cRole != nil {
-		err = r.Client.Delete(context.TODO(), cRole)
-		if err != nil {
-			return err
-		}
-		reqLogger.Info("Successfully removed ClusterRole")
-	}
-
-	reqLogger.Info("Successfully Finalized")
-
-	return nil
+// SetupWithManager sets up the controller with the Manager.
+func (r *AquaLightningReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	builder := ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.AquaLightning{}).
+		Named("aquacsp-controller").
+		WithOptions(controller.Options{Reconciler: r}).
+		Owns(&corev1.Secret{}).
+		Owns(&corev1.ServiceAccount{}).
+		Owns(&v1alpha1.AquaDatabase{}).
+		Owns(&v1alpha1.AquaEnforcer{}).
+		Owns(&v1alpha1.AquaKubeEnforcer{})
+
+	//isOpenshift, _ := ocp.VerifyRouteAPI()
+	//if isOpenshift {
+	//	builder.Owns(&routev1.Route{})
+	//}
+	return builder.Complete(r)
 }

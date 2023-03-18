@@ -3,38 +3,65 @@ kind: AquaLightning
 metadata:
   name: aqualightning-sample
 spec:
-  infra:
-    version: '2022.4'
-    serviceAccount: aqua-kube-enforcer-sa
-  config:
+  common:
+    imagePullSecret: aqua-registry
+  globals:
     gateway_address: aqua-gateway:8443
     cluster_name: Default-cluster-name
-    imagePullSecret: aqua-registry
-  token: "<<KUBE_ENFORCER_GROUP_TOKEN>>"
-  allowAnyVersion:                        # Optional: running all types of images
-  deploy:
-    service: ClusterIP
-    image:
-      registry: registry.aquasec.com
-      tag: "2022.4"
-      repository: kube-enforcer
-      pullPolicy: Always
-    resources:                              # Optional: Set resources requests/limits for kube-enforcer
-      limits:
-        cpu: "SOME VALUE"
-        memory: "SOME VALUE"
-      requests:
-        cpu: "SOME VALUE"
-        memory: "SOME VALUE"
-  starboard:
+  kubeEnforcer:
     infra:
-      serviceAccount: starboard-operator
-    config:
-      imagePullSecret: starboard-registry
+      version: '2022.4'
+      serviceAccount: aqua-kube-enforcer-sa
+    token: "<<KUBE_ENFORCER_GROUP_TOKEN>>"
+    allowAnyVersion:                        # Optional: running all types of images
     deploy:
-      replicas: 1
-  env:                                      # Optional: environment variables to add to the kube-enforcer
-  - name: "SOME ENV"
-    value: "SOME ENV VALUE"
-
-
+      service: ClusterIP
+      image:
+        registry: registry.aquasec.com
+        tag: "2022.4"
+        repository: kube-enforcer
+        pullPolicy: Always
+      resources:                              # Optional: Set resources requests/limits for kube-enforcer
+        limits:
+          cpu: "SOME VALUE"
+          memory: "SOME VALUE"
+        requests:
+          cpu: "SOME VALUE"
+          memory: "SOME VALUE"
+    starboard:
+      infra:
+        serviceAccount: starboard-operator
+      config:
+        imagePullSecret: starboard-registry
+      deploy:
+        replicas: 1
+    env:                                      # Optional: environment variables to add to the kube-enforcer
+    - name: "SOME ENV"
+      value: "SOME ENV VALUE"
+  enforcer:
+    infra:                                    # Required: Infrastructure information
+      serviceAccount: aqua-sa               # Required:
+      version: 2022.4                      # Optional: auto generate to latest version
+    deploy:                                   # Optional: information about aqua enforcer deployment
+      image:                                  # Optional: if not given take the default value and version from infra.version
+        repository: enforcer                # Optional: if not given take the default value - enforcer
+        registry: registry.aquasec.com      # Optional: if not given take the default value - registry.aquasec.com
+        tag: 2022.4                        # Optional: if not given take the default value - 4.5 (latest tested version for this operator version)
+        pullPolicy: IfNotPresent           # Optional: if not given take the default value - IfNotPresent
+      resources:                              # Optional: Set resources requests/limits for enforcers
+        limits:
+          cpu: SOME VALUE
+          memory: SOME VALUE
+        requests:
+          cpu: SOME VALUE
+          memory: SOME VALUE
+    token: "token"                            # Required: enforcer group token also can use an existing secret instead
+    env:                                      # Optional: environment variables to add to the enforcer
+      - name: "SOME ENV"
+        value: "SOME ENV VALUE"
+    secret:                                   # Optional: secret for the enforcer token
+      name:
+      key:
+    runAsNonRoot:                             # Optional: true/false
+    aqua_express_mode: false                  # Optional: Change to true, to enable express mode deployment of enforcer
+    rhcosVersion: "SOME VALUE"                # Optional: Set the RHCOS_VERSION with the exact OCP version to allow accurate vulnerability scanning.
