@@ -1,9 +1,13 @@
 package aqualightning
 
 import (
+	"fmt"
 	"github.com/aquasecurity/aqua-operator/apis/operator/v1alpha1"
 	"github.com/aquasecurity/aqua-operator/pkg/consts"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"strconv"
 	"strings"
 )
@@ -42,6 +46,14 @@ func (lightning *AquaLightningHelper) newAquaKubeEnforcer(cr *v1alpha1.AquaLight
 	tag := consts.LatestVersion
 	if cr.Spec.KubeEnforcer.Infrastructure.Version != "" {
 		tag = cr.Spec.KubeEnforcer.Infrastructure.Version
+	}
+
+	resources, err := yamlToResourceRequirements(consts.LightningKubeEnforcerResources)
+	if err != nil {
+		panic(err)
+	}
+	if cr.Spec.KubeEnforcer.KubeEnforcerService.Resources != nil {
+		resources = cr.Spec.KubeEnforcer.KubeEnforcerService.Resources
 	}
 
 	labels := map[string]string{
@@ -100,7 +112,7 @@ func (lightning *AquaLightningHelper) newAquaKubeEnforcer(cr *v1alpha1.AquaLight
 			},
 
 			KubeEnforcerService: &v1alpha1.AquaService{
-				Resources: cr.Spec.KubeEnforcer.KubeEnforcerService.Resources,
+				Resources: resources,
 			},
 
 			DeployStarboard: &AquaStarboardDetails,
@@ -118,9 +130,18 @@ func (lightning *AquaLightningHelper) newAquaEnforcer(cr *v1alpha1.AquaLightning
 		}
 	}
 	tag := consts.LatestVersion
-	if cr.Spec.KubeEnforcer.Infrastructure.Version != "" {
-		tag = cr.Spec.KubeEnforcer.Infrastructure.Version
+	if cr.Spec.Enforcer.Infrastructure.Version != "" {
+		tag = cr.Spec.Enforcer.Infrastructure.Version
 	}
+
+	resources, err := yamlToResourceRequirements(consts.LightningEnforcerResources)
+	if err != nil {
+		panic(err)
+	}
+	if cr.Spec.Enforcer.EnforcerService.Resources != nil {
+		resources = cr.Spec.Enforcer.EnforcerService.Resources
+	}
+
 	gwParts := strings.Split(cr.Spec.Global.GatewayAddress, ":")
 	gatewayHost := gwParts[0]
 	gatewayPort, _ := strconv.ParseInt(gwParts[1], 10, 64)
@@ -164,12 +185,37 @@ func (lightning *AquaLightningHelper) newAquaEnforcer(cr *v1alpha1.AquaLightning
 					Tag:        tag,
 					PullPolicy: "Always",
 				},
-				Resources: cr.Spec.Enforcer.EnforcerService.Resources,
+				Resources: resources,
 			},
 			RunAsNonRoot:           cr.Spec.Enforcer.RunAsNonRoot,
 			EnforcerUpdateApproved: cr.Spec.Enforcer.EnforcerUpdateApproved,
 		},
 	}
-
 	return aquaenf
+}
+
+func yamlToResourceRequirements(yamlString string) (*v1.ResourceRequirements, error) {
+	var yamlData map[string]map[string]map[string]string
+
+	err := yaml.Unmarshal([]byte(yamlString), &yamlData)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshaling YAML: %w", err)
+	}
+
+	limits := make(map[v1.ResourceName]resource.Quantity)
+	requests := make(map[v1.ResourceName]resource.Quantity)
+
+	for k, v := range yamlData["resources"]["limits"] {
+		limits[v1.ResourceName(k)] = resource.MustParse(v)
+	}
+	for k, v := range yamlData["resources"]["requests"] {
+		requests[v1.ResourceName(k)] = resource.MustParse(v)
+	}
+
+	resourceRequirements := &v1.ResourceRequirements{
+		Limits:   limits,
+		Requests: requests,
+	}
+
+	return resourceRequirements, nil
 }

@@ -21,13 +21,6 @@ spec:
         tag: "2022.4"
         repository: kube-enforcer
         pullPolicy: Always
-      resources:
-        limits:
-          cpu: 800m
-          memory: 500Mi
-        requests:
-          cpu: 200m
-          memory: 125Mi
     starboard:
       infra:
         serviceAccount: starboard-operator
@@ -43,17 +36,10 @@ spec:
       serviceAccount: aqua-sa                 # Required:
       version: "2022.4"                       # Optional: auto generate to latest version
     deploy:                                   # Optional: information about aqua enforcer deployment
-      resources:
-        limits:
-          cpu: 1000m
-          memory: 1500Mi
-        requests:
-          cpu: 300m
-          memory: 500Mi
       image:                                  # Optional: if not given take the default value and version from infra.version
         repository: "enforcer"                # Optional: if not given take the default value - enforcer
         registry: "registry.aquasec.com"      # Optional: if not given take the default value - registry.aquasec.com
-        tag: "2022.4"                         # Optional: if not given take the default value - 4.5 (latest tested version for this operator version)
+        tag: "2022.4"                         # Optional: if not given take the default value - 2022.4 (latest tested version for this operator version)
         pullPolicy: IfNotPresent              # Optional: if not given take the default value - IfNotPresent
     token: "<<ENFORCER_GROUP_TOKEN>>"
     env:                                      # Optional: environment variables to add to the enforcer
