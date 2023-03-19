@@ -82,6 +82,7 @@ func (lightning *AquaLightningHelper) newAquaKubeEnforcer(cr *v1alpha1.AquaLight
 				Repository: "starboard-operator",
 				PullPolicy: "IfNotPresent",
 			},
+			Resources: resources,
 		},
 	}
 	aquaKubeEnf := &v1alpha1.AquaKubeEnforcer{
