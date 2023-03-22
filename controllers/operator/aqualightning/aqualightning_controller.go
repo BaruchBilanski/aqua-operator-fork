@@ -108,7 +108,7 @@ func (r *AquaLightningReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		return reconcile.Result{Requeue: true, RequeueAfter: time.Duration(0)}, nil
 	}
-
+	reqLogger.Info("Finished Reconciling AquaLightning")
 	return ctrl.Result{}, nil
 }
 
