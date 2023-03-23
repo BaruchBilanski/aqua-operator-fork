@@ -1141,6 +1141,9 @@ func (r *AquaKubeEnforcerReconciler) KubeEnforcerFinalizer(cr *operatorv1alpha1.
 
 	if err != nil && errors.IsNotFound(err) {
 		reqLogger.Info("Aqua KubeEnforcer: ValidatingWebhookConfiguration is not found")
+	} else if err != nil && !errors.IsNotFound(err) {
+		reqLogger.Info("Aqua KubeEnforcer: Getting ValidatingWebhookConfiguration status encountered error")
+		return err
 	} else {
 		reqLogger.Info("Aqua KubeEnforcer: ValidatingWebhookConfiguration is found, attempting to delete...")
 		err = r.Client.Delete(context.TODO(), validatingWebhookConfiguration)
@@ -1158,6 +1161,9 @@ func (r *AquaKubeEnforcerReconciler) KubeEnforcerFinalizer(cr *operatorv1alpha1.
 
 	if err != nil && errors.IsNotFound(err) {
 		reqLogger.Info("Aqua KubeEnforcer: mutatingWebhookConfiguration is not found")
+	} else if err != nil && !errors.IsNotFound(err) {
+		reqLogger.Info("Aqua KubeEnforcer: Getting mutatingWebhookConfiguration status encountered error")
+		return err
 	} else {
 		reqLogger.Info("Aqua KubeEnforcer: mutatingWebhookConfiguration is found, attempting to delete...")
 		err = r.Client.Delete(context.TODO(), mutatingWebhookConfiguration)
@@ -1175,6 +1181,9 @@ func (r *AquaKubeEnforcerReconciler) KubeEnforcerFinalizer(cr *operatorv1alpha1.
 
 	if err != nil && errors.IsNotFound(err) {
 		reqLogger.Info("Aqua KubeEnforcer: cRoleBinding is not found")
+	} else if err != nil && !errors.IsNotFound(err) {
+		reqLogger.Info("Aqua KubeEnforcer: Getting cRoleBinding status encountered error")
+		return err
 	} else {
 		reqLogger.Info("Aqua KubeEnforcer: cRoleBinding is found, attempting to delete...")
 		err = r.Client.Delete(context.TODO(), cRoleBinding)
@@ -1192,9 +1201,12 @@ func (r *AquaKubeEnforcerReconciler) KubeEnforcerFinalizer(cr *operatorv1alpha1.
 
 	if err != nil && errors.IsNotFound(err) {
 		reqLogger.Info("Aqua KubeEnforcer: cRoleReaderRoleBinding is not found")
+	} else if err != nil && !errors.IsNotFound(err) {
+		reqLogger.Info("Aqua KubeEnforcer: Getting cRoleReaderRoleBinding status encountered error")
+		return err
 	} else {
 		reqLogger.Info("Aqua KubeEnforcer: cRoleReaderRoleBinding is found, attempting to delete...")
-		err = r.Client.Delete(context.TODO(), cRoleReaderRoleBinding)
+		err = r.Client.Delete(context.TODO(), cRoleBinding)
 		if err != nil {
 			reqLogger.Info("Aqua KubeEnforcer: Failed to delete cRoleReaderRoleBinding")
 			return err
@@ -1209,6 +1221,9 @@ func (r *AquaKubeEnforcerReconciler) KubeEnforcerFinalizer(cr *operatorv1alpha1.
 
 	if err != nil && errors.IsNotFound(err) {
 		reqLogger.Info("Aqua KubeEnforcer: cRole is not found")
+	} else if err != nil && !errors.IsNotFound(err) {
+		reqLogger.Info("Aqua KubeEnforcer: Getting cRole status encountered error")
+		return err
 	} else {
 		reqLogger.Info("Aqua KubeEnforcer: cRole is found, attempting to delete...")
 		err = r.Client.Delete(context.TODO(), cRole)
